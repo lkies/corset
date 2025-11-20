@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from functools import cached_property
 
-# from matplotlib import typing as plt_typing
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
@@ -47,19 +45,31 @@ def thin_lens(focal_length: float) -> np.ndarray:
     return np.array([[1, 0], [-1 / focal_length, 1]])
 
 
+# TODO general Element class?
+@dataclass(frozen=True)
+class Lens:
+    focal_length: float
+    left_margin: float = 0  # TODO default values?
+    right_margin: float = 0  # TODO default values?
+
+    @cached_property
+    def matrix(self) -> np.ndarray:
+        return thin_lens(self.focal_length)
+
+
 @dataclass(frozen=True)
 class OpticalSetup:
     initial_beam: Beam
-    elements: list[tuple[float, np.ndarray]]  # TODO, maybe some data structure for lenses or other elements?
+    elements: list[tuple[float, Lens]]
 
     @cached_property
     def rays(self) -> list[np.ndarray]:
         prev_ray = self.initial_beam.ray
         prev_pos = self.initial_beam.z_offset
         rays = [prev_ray]
-        for pos, matrix in self.elements:
+        for pos, element in self.elements:
             distance = pos - prev_pos
-            prev_ray = matrix @ free_space(distance) @ prev_ray
+            prev_ray = element.matrix @ free_space(distance) @ prev_ray
             rays.append(prev_ray)
             prev_pos = pos
         return rays
@@ -72,22 +82,10 @@ class OpticalSetup:
         ]
 
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
-        if np.isscalar(z):
-            index = np.searchsorted([pos for pos, _ in self.elements], z)
-            return self.beams[index].radius(z)  # pyright: ignore[reportArgumentType]
-
-        indices = np.searchsorted([pos for pos, _ in self.elements], z)
-
-        # TODO assert z is sorted?
-        if not np.all(np.diff(z) >= 0):
-            raise ValueError("z values must be sorted in ascending order")
-        boundaries = np.nonzero(np.diff(indices))[0] + 1
-        z_segments = np.split(z, boundaries)
-        segment_indices = np.concatenate([[indices[0]], indices[boundaries]])
-
-        return np.concatenate(
-            [self.beams[index].radius(z_segment) for index, z_segment in zip(segment_indices, z_segments, strict=True)]
-        )
+        if not np.isscalar(z):
+            return np.array([self.radius(zi) for zi in z])  # pyright: ignore[reportGeneralTypeIssues]
+        index = np.searchsorted([pos for pos, _ in self.elements], z)
+        return self.beams[index].radius(z)  # pyright: ignore[reportArgumentType]
 
     def plot(
         self,
