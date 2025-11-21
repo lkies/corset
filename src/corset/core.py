@@ -1,9 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
+
+from .plot import ModeMatchingPlot, OpticalSetupPlot, plot_optical_setup
 
 
 # TODO should beam include wavelength or should it be part of the larger setup?
@@ -36,6 +38,9 @@ class Beam:
     def from_gauss(waist: float, z_offset: float, wavelength: float) -> "Beam":
         return Beam(ray=np.array([0, wavelength / (np.pi * waist)]), z_offset=z_offset, wavelength=wavelength)
 
+    def plot(self, **kwargs) -> OpticalSetupPlot:  # pyright: ignore[reportPrivateImportUsage]
+        return OpticalSetup(self, []).plot(**kwargs)
+
 
 def free_space(distance: float) -> np.ndarray:
     return np.array([[1, distance], [0, 1]])
@@ -51,6 +56,7 @@ class Lens:
     focal_length: float
     left_margin: float = 0  # TODO default values?
     right_margin: float = 0  # TODO default values?
+    name: str | None = None
 
     @cached_property
     def matrix(self) -> np.ndarray:
@@ -87,37 +93,4 @@ class OpticalSetup:
         index = np.searchsorted([pos for pos, _ in self.elements], z)
         return self.beams[index].radius(z)  # pyright: ignore[reportArgumentType]
 
-    def plot(
-        self,
-        ax: plt.Axes,  # pyright: ignore[reportPrivateImportUsage]
-        *,
-        points: None | int | np.ndarray = None,
-        limits: tuple[float, float] | None = None,
-        beam_kwargs: dict = {"alpha": 0.5},  # noqa: B006
-        lens_kwargs: dict = {"zorder": 100},  # noqa: B006
-    ) -> None:
-        lens_positions = [pos for pos, _ in self.elements]
-
-        if isinstance(points, np.ndarray):
-            zs = points
-        else:
-            if not limits:
-                all_positions = [
-                    self.beams[0].focus - self.beams[0].rayleigh_range,
-                    *lens_positions,
-                    self.beams[-1].focus + self.beams[0].rayleigh_range,
-                ]
-                limits = (min(all_positions), max(all_positions))
-
-            num_points = points if isinstance(points, int) else 500
-            zs = np.linspace(limits[0], limits[1], num_points)
-
-        rs = self.radius(zs)
-        ax.fill_between(zs, -rs, rs, **beam_kwargs)
-        r_max = np.max(rs)
-        ax.vlines(lens_positions, -r_max * 1.1, r_max * 1.1, **lens_kwargs)
-        ax.set_xlabel("z in mm")
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e3:.0f}"))
-
-        ax.set_ylabel(r"w(z) in $\mathrm{\mu m}$")
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e6:.0f}"))
+    plot = plot_optical_setup
