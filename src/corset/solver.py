@@ -105,6 +105,8 @@ class ModeMatchingProblem:
     min_elements: int
     max_elements: int  # pyright: ignore[reportAssignmentType]
     constraints: list[Aperture | Passage]
+    # TODO make it so that the order of evaluating the candidates does not change their random values
+    rng: np.random.Generator
 
     @cached_property
     def aperture_constraints(self) -> list[Aperture]:
@@ -178,7 +180,7 @@ class ModeMatchingCandidate:
                 raise ValueError("Not enough space in region for the lenses with their margins")
 
             if randomize:
-                distances = np.diff(np.sort(np.random.uniform(0, available_space, len(population))), prepend=0)
+                distances = np.diff(np.sort(self.problem.rng.uniform(0, available_space, len(population))), prepend=0)
             else:
                 distances = np.repeat(available_space / (len(population) + 1), len(population))
 
@@ -329,6 +331,7 @@ def mode_match(
     filter_pred: Callable[[ModeMatchSolution], bool] | float | None = None,
     random_initial_positions: int = 0,
     equal_setup_tol: float = 1e-3,
+    random_seed: int = 0,
     # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
     # TODO other solver options
 ):
@@ -351,6 +354,7 @@ def mode_match(
         min_elements=min_elements,
         max_elements=max_elements,
         constraints=constraints,
+        rng=np.random.default_rng(random_seed),
     )
 
     solutions = []
