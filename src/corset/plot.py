@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from .solver import ModeMatchSolution
 
 RELATIVE_MARGIN = 0.1
+
+milli_formatter = FuncFormatter(lambda x, _: f"{x*1e3:.0f}")
+micro_formatter = FuncFormatter(lambda x, _: f"{x*1e6:.0f}")
 
 
 def dilute_color(color: str, alpha: float) -> str:
@@ -109,6 +112,7 @@ def plot_optical_setup(
             color=color,
             zorder=zorder,
         )
+        # TODO label and enumerate free lenses?
         label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length*1e3)}mm"
         label = ax.annotate(label_text, xy=(pos, w_max * (1 + 2 * RELATIVE_MARGIN)), va="center", ha="center")
         lenses.append((lens_col, label))
@@ -119,10 +123,10 @@ def plot_optical_setup(
     )
 
     ax.set_xlabel("z in mm")
-    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e3:.0f}"))
+    ax.xaxis.set_major_formatter(milli_formatter)
 
     ax.set_ylabel(r"w(z) in $\mathrm{\mu m}$")
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 1e6:.0f}"))
+    ax.yaxis.set_major_formatter(micro_formatter)
 
     return OpticalSetupPlot(ax=ax, z=zs, w=rs, beam=fb_col, lenses=lenses)  # pyright: ignore[reportArgumentType]
 
@@ -136,11 +140,13 @@ def plot_mode_match_solution(
 
     ax = ax or plt.gca()
 
+    problem = self.candidate.problem
+
     setup_plot = plot_optical_setup(self.setup, ax=ax)
-    desired_plot = plot_optical_setup(OpticalSetup(self.problem.desired_beam, []), ax=ax, beam_kwargs={"color": "C1"})
+    desired_plot = plot_optical_setup(OpticalSetup(problem.desired_beam, []), ax=ax, beam_kwargs={"color": "C1"})
 
     regions = []
-    for region in self.problem.regions:
+    for region in problem.regions:
         # TODO color configuratbility?
         rectangle = Rectangle(
             (region.left, -setup_plot.w_max * (1 + 2 * RELATIVE_MARGIN)),
@@ -155,7 +161,7 @@ def plot_mode_match_solution(
 
     apertures = []
     passages = []
-    for con in self.problem.constraints:
+    for con in problem.constraints:
         if isinstance(con, Aperture):
             apertures.append(
                 ax.plot([con.position, con.position], [-con.radius, con.radius], marker="o", color="C4", zorder=80)

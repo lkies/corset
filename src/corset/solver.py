@@ -78,34 +78,9 @@ def mode_overlap(waist_a: float, waist_b: float, delta_z: float, wavelength: flo
     )
 
 
-def lens_combinations(
-    regions: list[Region],
-    base_selection: list[Lens],
-    min_elements: int,
-    max_elements: int,
-    current_setup: list[tuple[Lens, ...]] = [],  # noqa: B006
-) -> Generator[list[tuple[Lens, ...]], None, None]:
-    if not regions:
-        if min_elements <= 0:
-            yield current_setup
-        return
-
-    first, *rest = regions
-
-    if first.min_elements > max_elements:
-        return
-
-    for num_elements in range(first.min_elements, min(first.max_elements, max_elements) + 1):
-        selection = first.selection if first.selection else base_selection
-        for comb in combinations_with_replacement(selection, num_elements):
-            new_setup = [*current_setup, comb]
-            yield from lens_combinations(
-                rest, base_selection, min_elements - num_elements, max_elements - num_elements, new_setup
-            )
-
-
+# TODO should this be part of some class?
 # TODO verify no overlap between regions, maybe also verify regions sizes can fit lenses?
-def verify_regions(regions: list[Region], selection: list[Lens], min_elements: int, max_elements: int):
+def verify_regions(regions: list[Region], min_elements: int, max_elements: int):
     if max_elements is not None and max_elements < min_elements:
         raise ValueError("Global max_elements cannot be less than min_elements")
 
@@ -126,6 +101,9 @@ class ModeMatchingProblem:
     setup: OpticalSetup
     desired_beam: Beam
     regions: list[Region]
+    selection: list[Lens]
+    min_elements: int
+    max_elements: int  # pyright: ignore[reportAssignmentType]
     constraints: list[Aperture | Passage]
 
     @cached_property
@@ -133,7 +111,7 @@ class ModeMatchingProblem:
         return [aperture for constraint in self.constraints for aperture in constraint.apertures()]
 
     @cached_property
-    def merged_elements(self) -> list[tuple[float, Lens] | int]:
+    def interleaved_elements(self) -> list[tuple[float, Lens] | int]:
         merged: list[tuple[float, Lens] | int] = []
         next_boundary = self.regions[0].left if self.regions else float("inf")
         region_index = 0
@@ -151,22 +129,47 @@ class ModeMatchingProblem:
 
         return merged
 
-    def parametrized_setup(self, population: list[tuple[Lens, ...]]) -> ParametrizedSetup:
-        elements = []
-        for elem in self.merged_elements:
-            if isinstance(elem, int):
-                for lens in population[elem]:
-                    elements.append((None, lens))
-            else:
-                elements.append(elem)
-        return ParametrizedSetup(self.setup.initial_beam, elements)
+    @classmethod
+    def lens_combinations(
+        cls,
+        regions: list[Region],
+        base_selection: list[Lens],
+        min_elements: int,
+        max_elements: int,
+        current_setup: list[tuple[Lens, ...]] = [],  # noqa: B006
+    ) -> Generator[list[tuple[Lens, ...]], None, None]:
+        if not regions:
+            if min_elements <= 0:
+                yield current_setup
+            return
+
+        first, *rest = regions
+
+        if first.min_elements > max_elements:
+            return
+
+        for num_elements in range(first.min_elements, min(first.max_elements, max_elements) + 1):
+            selection = first.selection if first.selection else base_selection
+            for comb in combinations_with_replacement(selection, num_elements):
+                new_setup = [*current_setup, comb]
+                yield from cls.lens_combinations(
+                    rest, base_selection, min_elements - num_elements, max_elements - num_elements, new_setup
+                )
+
+    def candidates(self) -> Generator["ModeMatchingCandidate", None, None]:
+        for population in self.lens_combinations(self.regions, self.selection, self.min_elements, self.max_elements):
+            yield ModeMatchingCandidate(problem=self, populations=population)
+
+
+@dataclass(frozen=True)
+class ModeMatchingCandidate:
+    problem: ModeMatchingProblem
+    populations: list[tuple[Lens, ...]]
 
     # TODO seeding?
-    def generate_initial_positions(
-        self, region_populations: list[tuple[Lens, ...]], randomize: bool = True
-    ) -> np.ndarray:
+    def generate_initial_positions(self, randomize: bool = True) -> np.ndarray:
         positions = []
-        for region, population in zip(self.regions, region_populations, strict=True):
+        for region, population in zip(self.problem.regions, self.populations, strict=True):
             if not population:
                 continue
             total_margin = sum(lens.left_margin + lens.right_margin for lens in population)
@@ -187,12 +190,24 @@ class ModeMatchingProblem:
 
         return np.array(positions)
 
-    def make_position_constraint(self, region_populations: list[tuple[Lens, ...]]) -> optimize.LinearConstraint:
+    @cached_property
+    def parametrized_setup(self) -> ParametrizedSetup:
+        elements = []
+        for elem in self.problem.interleaved_elements:
+            if isinstance(elem, int):
+                for lens in self.populations[elem]:
+                    elements.append((None, lens))
+            else:
+                elements.append(elem)
+        return ParametrizedSetup(self.problem.setup.initial_beam, elements)
+
+    @cached_property
+    def position_constraint(self) -> optimize.LinearConstraint:
         constraints: list[tuple[np.ndarray, float, float]] = []
-        pop_sizes = [len(pop) for pop in region_populations]
+        pop_sizes = [len(pop) for pop in self.populations]
         index_offsets = np.cumsum([0, *pop_sizes[:-1]])
         mask = np.identity(sum(pop_sizes))
-        for region, population, base_idx in zip(self.regions, region_populations, index_offsets, strict=True):
+        for region, population, base_idx in zip(self.problem.regions, self.populations, index_offsets, strict=True):
             if not population:
                 continue
             if len(population) == 1:
@@ -219,53 +234,52 @@ class ModeMatchingProblem:
             np.vstack(cols), np.array(lb), np.array(ub)  # pyright: ignore[reportArgumentType]
         )
 
-    def make_beam_constraints(self, setup: ParametrizedSetup) -> optimize.NonlinearConstraint:
-        positions, radii = np.transpose([(c.position, c.radius) for c in self.aperture_constraints])
+    @cached_property
+    def beam_constraint(self) -> optimize.NonlinearConstraint:
+        positions, radii = np.transpose([(c.position, c.radius) for c in self.problem.aperture_constraints])
         return optimize.NonlinearConstraint(
-            lambda x, pos=positions, setup=setup: setup.substitute(x).radius(pos) / radii, 0, 1
+            lambda x, pos=positions, setup=self.parametrized_setup: setup.substitute(x).radius(pos) / radii, 0, 1
         )
 
-    def optimize_population(
+    def optimize(
         self,
-        population: list[tuple[Lens, ...]],
         filter_pred: Callable[["ModeMatchSolution"], bool],
         random_initial_positions: int,
         equal_setup_tol: float,
     ) -> list["ModeMatchSolution"]:
-        initial_setups = [self.generate_initial_positions(population, randomize=False)]
+        initial_setups = [self.generate_initial_positions(randomize=False)]
         for _ in range(random_initial_positions):
-            initial_setups.append(self.generate_initial_positions(population, randomize=True))
+            initial_setups.append(self.generate_initial_positions(randomize=True))
 
-        parametrized_setup = self.parametrized_setup(population)
-        solver_constraints: list = [self.make_position_constraint(population)]
+        solver_constraints: list = [self.position_constraint]
 
-        if self.constraints:
-            beam_constraints = self.make_beam_constraints(parametrized_setup)
-            solver_constraints.append(beam_constraints)
+        if self.problem.constraints:
+            solver_constraints.append(self.beam_constraint)
 
             # make initial setups satisfy beam constraints and filter out non feasible ones
             filtered_setups = []
             for x0 in initial_setups:
                 res = optimize.minimize(
-                    lambda x: np.max(beam_constraints.fun(x)),
+                    lambda x: np.max(self.beam_constraint.fun(x)),
                     x0,
                     constraints=solver_constraints,
                     method="SLSQP",
                     options={"ftol": 2e-1},
                 )
-                if np.all(beam_constraints.fun(res.x) <= beam_constraints.ub) and all(
+                if np.all(self.beam_constraint.fun(res.x) <= self.beam_constraint.ub) and all(
                     not np.allclose(res.x, x0) for x0 in filtered_setups
                 ):
                     filtered_setups.append(res.x)
             initial_setups = filtered_setups
 
         def objective(positions: np.ndarray) -> float:
-            setup = parametrized_setup.substitute(positions)
+            setup = self.parametrized_setup.substitute(positions)  # pyright: ignore[reportArgumentType]
             final_beam = setup.beams[-1]
+            desired_beam = self.problem.desired_beam
             return -mode_overlap(
                 final_beam.waist,
-                self.desired_beam.waist,
-                final_beam.focus - self.desired_beam.focus,
+                desired_beam.waist,
+                final_beam.focus - desired_beam.focus,
                 final_beam.wavelength,  # pyright: ignore[reportArgumentType]
             )
 
@@ -277,11 +291,9 @@ class ModeMatchingProblem:
                 continue
 
             sol = ModeMatchSolution(
-                problem=self,
+                candidate=self,
                 overlap=-res.fun,
                 positions=res.x,
-                region_populations=population,
-                parametrized_setup=parametrized_setup,
             )
             if any(np.allclose(sol.positions, pos, atol=equal_setup_tol, rtol=0) for pos in solution_positions):
                 continue
@@ -294,19 +306,18 @@ class ModeMatchingProblem:
 
 @dataclass(frozen=True)
 class ModeMatchSolution:
-    problem: ModeMatchingProblem
+    candidate: ModeMatchingCandidate
     overlap: float
     positions: np.ndarray
-    region_populations: list[tuple[Lens, ...]]
-    parametrized_setup: ParametrizedSetup
 
     @property
     def setup(self) -> OpticalSetup:
-        return self.parametrized_setup.substitute(self.positions)
+        return self.candidate.parametrized_setup.substitute(self.positions)  # pyright: ignore[reportArgumentType]
 
     plot = plot_mode_match_solution
 
 
+# TODO should this be a method of ModeMatchingProblem?
 def mode_match(
     setup: Beam | OpticalSetup,
     desired_beam: Beam,
@@ -318,13 +329,13 @@ def mode_match(
     filter_pred: Callable[[ModeMatchSolution], bool] | float | None = None,
     random_initial_positions: int = 0,
     equal_setup_tol: float = 1e-3,
-    # pure_constraints: bool = False,  # TODO also give constraints a slight weight
+    # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
     # TODO other solver options
 ):
     # verify and prepare inputs
     if isinstance(setup, Beam):
         setup = OpticalSetup(setup, [])
-    verify_regions(regions, selection, min_elements, max_elements)
+    verify_regions(regions, min_elements, max_elements)
 
     if isinstance(filter_pred, float):
         min_overlap = filter_pred
@@ -332,18 +343,24 @@ def mode_match(
     elif filter_pred is None:
         filter_pred = lambda s: True
 
-    problem = ModeMatchingProblem(setup, desired_beam, regions, constraints)
+    problem = ModeMatchingProblem(
+        setup=setup,
+        desired_beam=desired_beam,
+        regions=regions,
+        selection=selection,
+        min_elements=min_elements,
+        max_elements=max_elements,
+        constraints=constraints,
+    )
 
     solutions = []
     # TODO parallelize this loop?
-    for lens_population in lens_combinations(regions, selection, min_elements, max_elements):
+    for candidate in problem.candidates():
         solutions.extend(
-            problem.optimize_population(
-                population=lens_population,
+            candidate.optimize(
                 filter_pred=filter_pred,  # pyright: ignore[reportArgumentType]
                 random_initial_positions=random_initial_positions,
                 equal_setup_tol=equal_setup_tol,
-                # pure_constraints=pure_constraints,
             )
         )
 
@@ -351,3 +368,4 @@ def mode_match(
 
     # TODO some sanity checks to ensure the desired beam is after the last setup part
     # TODO other checks like non overlapping regions
+    # TODO return special solution list type that allows sorting and filtering and other convenient stuff
