@@ -19,7 +19,7 @@ corset = { path = ".", editable = true }
 [tool.pixi.tasks]
 
 [dependency-groups]
-dev = ["ipykernel", "matplotlib"]
+dev = ["ipykernel"]
 
 [tool.pixi.environments]
 dev = ["dev"]
