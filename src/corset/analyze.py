@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import lines
+from matplotlib.axes import Axes
+from matplotlib.colorbar import Colorbar
+from matplotlib.lines import Line2D
 from scipy import linalg as sp_linalg
 from scipy.differentiate import hessian
 
@@ -122,22 +124,39 @@ class SensitivityAnalysis:
         return null_space
 
 
+# Return types for plotting functions
+@dataclass(frozen=True)
+class ReachabilityPlot:
+    ax: Axes
+    lines: list[list[Line2D]]
+    contour: Any
+    colorbar: Colorbar | None
+
+
+@dataclass(frozen=True)
+class SensitivityPlot:
+    ax: Axes
+    contours: list[Any]
+    colorbar: Colorbar | None
+    handles: list
+
+
 def plot_reachability(
-    solution: ModeMatchSolution,
+    self: ModeMatchSolution,
     displacement: float | list[float] = 5e-3,
     num_samples: int | list[int] = 7,
     grid_step: int | list[int] = 2,
     dimensions: list[int] | None = None,
     focus_range: tuple[float, float] | None = None,
     waist_range: tuple[float, float] | None = None,
-    ax: plt.Axes | None = None,  # pyright: ignore[reportPrivateImportUsage]
-) -> None:
+    ax: Axes | None = None,
+) -> ReachabilityPlot:
     # TODO add reachability analysis plot class
     from .solver import mode_overlap
 
     ax = ax or plt.gca()
     if dimensions is None:
-        dimensions = list(range(len(solution.positions)))
+        dimensions = list(range(len(self.positions)))
 
     num_dof = len(dimensions)
     displacement = cast(list, [displacement] * num_dof if np.isscalar(displacement) else displacement)
@@ -147,7 +166,7 @@ def plot_reachability(
     linspaces = [
         np.linspace(-d, d, num=n) + offset
         for d, n, offset in zip(
-            displacement, num_samples, solution.positions, strict=True  # pyright: ignore[reportArgumentType]
+            displacement, num_samples, self.positions, strict=True  # pyright: ignore[reportArgumentType]
         )
     ]
 
@@ -158,28 +177,30 @@ def plot_reachability(
         ax.set_ylim(waist_range)
 
     focus_and_waist = np.vectorize(
-        vector_partial(make_focus_and_waist(solution), solution.positions, dimensions), signature="(n)->(2)"
+        vector_partial(make_focus_and_waist(self), self.positions, dimensions), signature="(n)->(2)"
     )
 
     grids = np.moveaxis(np.meshgrid(*linspaces, indexing="ij"), 0, -1)  # pyright: ignore[reportArgumentType]
     focuses, waists = np.moveaxis(focus_and_waist(grids), -1, 0)
-    delta_focuses = focuses - solution.candidate.problem.desired_beam.focus
+    delta_focuses = focuses - self.candidate.problem.desired_beam.focus
 
-    artists: list = [
-        ax.scatter(0, solution.candidate.problem.desired_beam.waist, color="k", marker="o", label="Desired", zorder=100)
-    ]
+    center = ax.scatter(
+        0, self.candidate.problem.desired_beam.waist, color="k", marker="o", label="Desired", zorder=100
+    )
 
     def select_lines(arr: np.ndarray, dim: int, steps: list[int]) -> np.ndarray:
         steps = [step if i != dim else 1 for i, step in enumerate(steps)]
         indices = tuple(slice(None, None, step) for step in steps)
         return np.moveaxis(arr[indices], dim, -1).reshape(-1, arr.shape[dim])
 
+    lines: list[list[Line2D]] = []
     for i, (dim, disp) in enumerate(zip(dimensions, displacement, strict=True)):
         focuses_flat = select_lines(delta_focuses, i, grid_step)  # pyright: ignore[reportArgumentType]
         waists_flat = select_lines(waists, i, grid_step)  # pyright: ignore[reportArgumentType]
         for focus, waist in zip(focuses_flat, waists_flat, strict=True):
+            lines.append([])
             line = ax.plot(focus, waist, color=f"C{dim}", label=rf"$\Delta x_{i}$ ($\pm{disp*1e3:.1f}$ mm)")[0]
-        artists.append(line)
+            lines[-1].append(line)
         ax.annotate(
             "",
             xy=(focuses_flat[0][1], waists_flat[0][1]),
@@ -187,21 +208,21 @@ def plot_reachability(
             arrowprops={"color": f"C{i}", "headwidth": 10, "width": 2},
         )
 
-    ax.legend(handles=artists)
+    ax.legend(handles=[center] + [line[0] for line in lines])
 
     grid_n = 50
     focuses_grid, waists_grid = np.meshgrid(np.linspace(*ax.get_xlim(), grid_n), np.linspace(*ax.get_ylim(), grid_n))
     overlap = mode_overlap(
-        solution.candidate.problem.desired_beam.waist,
+        self.candidate.problem.desired_beam.waist,
         waists_grid,  # pyright: ignore[reportArgumentType]
         focuses_grid,  # pyright: ignore[reportArgumentType]
-        solution.candidate.problem.setup.initial_beam.wavelength,
+        self.candidate.problem.setup.initial_beam.wavelength,
     )
 
     levels = Config.OVERLAP_LEVELS
     colors = Config.overlap_colors()
     res = ax.contourf(focuses_grid, waists_grid, overlap * 100, levels=levels, colors=colors, alpha=0.5)
-    ax.figure.colorbar(res, label="Mode overlap (%)")
+    cb = ax.figure.colorbar(res, label="Mode overlap (%)")
 
     ax.set_xlabel(r"Focus Displacement in mm")
     ax.xaxis.set_major_formatter(milli_formatter)
@@ -211,9 +232,11 @@ def plot_reachability(
 
     ax.set_title("Reachability Analysis")
 
+    return ReachabilityPlot(ax=ax, lines=lines, contour=res, colorbar=cb)
+
 
 def plot_sensitivity(
-    solution: "ModeMatchSolution",
+    self: "ModeMatchSolution",
     dimensions: tuple[int, int] | tuple[int, int, int] | None = None,
     worst_overlap: float = 0.95,
     x_range: tuple[float, float] | None = None,
@@ -221,25 +244,25 @@ def plot_sensitivity(
     z_range: tuple[float, float] | None = None,
     z_n: int = 3,  # more is too cluttered most times
     force_contours: bool = False,
-    ax: plt.Axes | None = None,  # pyright: ignore[reportPrivateImportUsage]
-) -> None:
+    ax: Axes | None = None,
+) -> SensitivityPlot:
     ax = ax or plt.gca()
 
     if dimensions is None:
-        dimensions = solution.analysis.min_coup_pair
-        if len(solution.positions) > 2:
-            all_dims = set(range(len(solution.positions)))
+        dimensions = self.analysis.min_coup_pair
+        if len(self.positions) > 2:
+            all_dims = set(range(len(self.positions)))
             remaining_dims = list(all_dims - set(dimensions))
-            most_sensitive = max(remaining_dims, key=lambda dim: solution.analysis.sensitivities[dim, dim])
+            most_sensitive = max(remaining_dims, key=lambda dim: self.analysis.sensitivities[dim, dim])
             dimensions = (*dimensions, most_sensitive)
 
     mode_overlap = np.vectorize(
-        vector_partial(make_mode_overlap(solution), solution.positions, dimensions), signature="(n)->()"
+        vector_partial(make_mode_overlap(self), self.positions, dimensions), signature="(n)->()"
     )
 
     # the hessian will always be badly conditioned for ndim > 2, so only use the subspace we care about
     # which should be well conditioned
-    A_xy_inv = np.linalg.inv(-solution.analysis.hessian[np.ix_(dimensions[:2], dimensions[:2])] / 2)  # noqa: N806
+    A_xy_inv = np.linalg.inv(-self.analysis.hessian[np.ix_(dimensions[:2], dimensions[:2])] / 2)  # noqa: N806
     if x_range is None:
         abs_max_range_x = np.sqrt(A_xy_inv[0, 0] * (1 - worst_overlap))
         x_range = (-abs_max_range_x * 1.1, abs_max_range_x * 1.1)
@@ -248,26 +271,33 @@ def plot_sensitivity(
         y_range = (-abs_max_range_y * 1.1, abs_max_range_y * 1.1)
 
     if len(dimensions) > 2:
-        A_xyz = -solution.analysis.hessian[np.ix_(dimensions, dimensions)]  # noqa: N806
+        A_xyz = -self.analysis.hessian[np.ix_(dimensions, dimensions)]  # noqa: N806
         eigs = np.linalg.eigh(A_xyz)
         v_min = eigs.eigenvectors[:, np.argmin(eigs.eigenvalues)]
         abs_max_range_z = min(abs(v_min[2] / v_min[0] * abs_max_range_x), abs(v_min[2] / v_min[1] * abs_max_range_y))
         z_range = (-abs_max_range_z, abs_max_range_z)
 
     grid_n = 50
-    base = np.array([solution.positions[dim] for dim in dimensions])
+    base = np.array([self.positions[dim] for dim in dimensions])
     xs = np.linspace(*x_range, grid_n)
     ys = np.linspace(*y_range, grid_n)
     xsg, ysg = np.meshgrid(xs, ys)
     cmap = plt.get_cmap("berlin")
+
+    contours = []
+    colorbar = None
+    handles: list = []
+
     if len(dimensions) == 2:
         overlaps = mode_overlap(np.stack([xsg, ysg], axis=-1) + base)
         if force_contours:
             cont = ax.contour(xsg, ysg, overlaps * 100, levels=Config.OVERLAP_LEVELS, colors=cmap(0.5))
             ax.clabel(cont, fmt="%1.1f%%")
+            contours.append(cont)
         else:
             cont = ax.contourf(xsg, ysg, overlaps * 100, levels=Config.OVERLAP_LEVELS, colors=Config.overlap_colors())
-            ax.figure.colorbar(cont, label="Mode overlap (%)")
+            colorbar = ax.figure.colorbar(cont, label="Mode overlap (%)")
+            contours.append(cont)
     else:
         z_colors = cmap(np.linspace(0, 1, z_n))
         zs = np.linspace(*z_range, z_n)  # pyright: ignore[reportCallIssue]
@@ -275,13 +305,14 @@ def plot_sensitivity(
             positions = np.stack([xsg, ysg, z * np.ones_like(xsg)], axis=-1) + base
             overlaps = mode_overlap(positions)
             zorder = 100 if i == z_n // 2 else 10
-            res = ax.contour(
+            cont = ax.contour(
                 xsg, ysg, overlaps * 100, levels=Config.OVERLAP_LEVELS, colors=[color], alpha=0.7, zorder=zorder
             )
+            contours.append(cont)
             if i == z_n // 2:
-                ax.clabel(res, fmt="%1.1f%%", colors=[color])
+                ax.clabel(cont, fmt="%1.1f%%", colors=[color])
         handles = [
-            lines.Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value*1e3:.1f}$ mm")
+            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value*1e3:.1f}$ mm")
             for color, value in zip(z_colors, zs, strict=True)
         ]
         ax.legend(handles=handles).set_zorder(1000)
@@ -292,3 +323,5 @@ def plot_sensitivity(
     ax.yaxis.set_major_formatter(milli_formatter)
 
     ax.set_title("Sensitivity Analysis")
+
+    return SensitivityPlot(ax=ax, contours=contours, colorbar=colorbar, handles=handles)

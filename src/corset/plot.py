@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
+from matplotlib.axes import Axes
 from matplotlib.collections import FillBetweenPolyCollection, LineCollection
 from matplotlib.lines import Line2D
-
-# import matplotlib.patches as patches
 from matplotlib.patches import Rectangle
+from matplotlib.text import Annotation
 from matplotlib.ticker import FuncFormatter
 
 # prevent circular import for type annotation in function signature
@@ -30,11 +30,11 @@ def dilute_color(color: str, alpha: float) -> str:
 
 @dataclass(frozen=True)
 class OpticalSetupPlot:
-    ax: plt.Axes  # pyright: ignore[reportPrivateImportUsage]
+    ax: Axes
     z: np.ndarray
     w: np.ndarray
     beam: FillBetweenPolyCollection
-    lenses: list[tuple[LineCollection, plt.Annotation]]  # pyright: ignore[reportPrivateImportUsage]
+    lenses: list[tuple[LineCollection, Annotation]]
 
     @cached_property
     def w_max(self) -> float:
@@ -45,7 +45,7 @@ class OpticalSetupPlot:
 
 @dataclass(frozen=True)
 class ModeMatchingPlot:
-    ax: plt.Axes  # pyright: ignore[reportPrivateImportUsage]
+    ax: Axes
     setup: OpticalSetupPlot
     desired_beam: OpticalSetupPlot
     regions: list[Rectangle]
@@ -58,7 +58,7 @@ class ModeMatchingPlot:
 def plot_optical_setup(
     self: "OpticalSetup",
     *,
-    ax: plt.Axes | None = None,  # pyright: ignore[reportPrivateImportUsage]
+    ax: Axes | None = None,
     points: None | int | np.ndarray = None,
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict = {"color": "C0", "alpha": 0.5},  # noqa: B006
@@ -134,10 +134,7 @@ def plot_optical_setup(
     return OpticalSetupPlot(ax=ax, z=zs, w=rs, beam=fb_col, lenses=lenses)  # pyright: ignore[reportArgumentType]
 
 
-def plot_mode_match_solution(
-    self: "ModeMatchSolution",
-    ax: plt.Axes | None = None,  # pyright: ignore[reportPrivateImportUsage]
-) -> ModeMatchingPlot:
+def plot_mode_match_solution(self: "ModeMatchSolution", ax: Axes | None = None) -> ModeMatchingPlot:
     from .core import OpticalSetup
     from .solver import Aperture, Passage
 
