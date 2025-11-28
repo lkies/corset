@@ -275,7 +275,6 @@ def plot_reachability(
             arrowprops={"color": f"C{i}", "headwidth": 10, "width": 2},
         )
 
-    print(len([center] + [line[0] for line in lines]))
     ax.legend(handles=[center] + [line[0] for line in lines])
 
     grid_n = 50
@@ -319,7 +318,7 @@ def plot_sensitivity(
     ax = ax or plt.gca()
 
     if dimensions is None:
-        dimensions = self.analysis.min_coup_pair
+        dimensions = self.analysis.min_coupling_pair
         if len(self.positions) > 2:
             all_dims = set(range(len(self.positions)))
             remaining_dims = list(all_dims - set(dimensions))

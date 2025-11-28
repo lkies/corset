@@ -5,8 +5,10 @@ from functools import cached_property, wraps
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from scipy import linalg as sp_linalg
+import pandas as pd
 from scipy.differentiate import hessian
+
+from .config import Config
 
 if TYPE_CHECKING:
     from .solver import ModeMatchSolution
@@ -78,7 +80,6 @@ class SensitivityAnalysis:
         hess_res = hessian(mode_overlap, self.solution.positions, initial_step=1e-2)
         if np.any(hess_res.status != 0):
             warnings.warn(f"Hessian calculation did not converge: {hess_res.status}", stacklevel=2)
-        print(hess_res.ddf)
 
         return hess_res.ddf
 
@@ -94,24 +95,76 @@ class SensitivityAnalysis:
 
     # TODO should this be in terms of couplings or sensitivities?
     @cached_property
-    def min_coup_pair(self) -> tuple[int, int]:
+    def min_coupling_pair(self) -> tuple[int, int]:
         indices = np.triu_indices(len(self.sensitivities), k=1)
         abs_couplings = np.abs(self.couplings[indices])
         best = np.argmin(abs_couplings)
         return (int(indices[0][best]), int(indices[1][best]))
 
     @cached_property
-    def min_sens_pair(self) -> tuple[int, int]:
+    def min_coupling(self) -> float:
+        return abs(float(self.couplings[self.min_coupling_pair]))
+
+    @cached_property
+    def min_cross_sens_pair(self) -> tuple[int, int]:
         indices = np.triu_indices(len(self.sensitivities), k=1)
         abs_sensitivities = np.abs(self.sensitivities[indices])
         best = np.argmin(abs_sensitivities)
         return (int(indices[0][best]), int(indices[1][best]))
 
-    # the vectors spanning the sub space in which the mode overlap stays constant
-    # equivalent to the null space of the hessian
     @cached_property
-    def const_space(self) -> np.ndarray:
-        null_space = sp_linalg.null_space(self.hessian, rcond=1e-5)
-        if null_space.shape[1] != len(self.solution.positions) - 2:
-            warnings.warn("Constancy space does not have expected dimension. Results may be inaccurate.", stacklevel=2)
-        return null_space
+    def min_cross_sens(self) -> float:
+        return abs(float(self.sensitivities[self.min_cross_sens_pair]))
+
+    @cached_property
+    def min_sensitivity_axis(self) -> int:
+        diag_sensitivities = np.abs(np.diag(self.sensitivities))
+        return int(np.argmin(diag_sensitivities))
+
+    @cached_property
+    def min_sensitivity(self) -> float:
+        return float(self.sensitivities[self.min_sensitivity_axis, self.min_sensitivity_axis])
+
+    @cached_property
+    def max_sensitivity_axis(self) -> int:
+        diag_sensitivities = np.abs(np.diag(self.sensitivities))
+        return int(np.argmax(diag_sensitivities))
+
+    @cached_property
+    def max_sensitivity(self) -> float:
+        return float(self.sensitivities[self.max_sensitivity_axis, self.max_sensitivity_axis])
+
+    # the vectors spanning the sub space in which the mode overlap stays approximately constant
+    # equivalent to the null space of the hessian assuming the minor eigenvalues are zero
+    @cached_property
+    def const_space(self) -> list[np.ndarray]:
+        eigs = np.linalg.eigh(self.hessian)
+        return list(eigs.eigenvectors.T[np.argsort(eigs.eigenvalues)[2:]])
+
+    def report(self, sensitivity_unit: Config.SensitivityUnit | None | bool = None) -> dict:
+        unit_suffix = ""
+        factor = 1.0
+        if sensitivity_unit is None:
+            sensitivity_unit = Config.SENSITIVITY_UNIT
+            unit_suffix = "_" + sensitivity_unit.value.ascii
+            factor = sensitivity_unit.value.factor
+        return {
+            "overlap": self.solution.overlap,
+            "elements": len(self.solution.positions),
+            "min_sensitivity_axis": self.min_sensitivity_axis,
+            "min_sensitivity" + unit_suffix: self.min_sensitivity * factor,
+            "max_sensitivity_axis": self.max_sensitivity_axis,
+            "max_sensitivity" + unit_suffix: self.max_sensitivity * factor,
+            "min_cross_sens_pair": self.min_cross_sens_pair,
+            "min_cross_sens" + unit_suffix: self.min_cross_sens * factor,
+            "min_coupling_pair": self.min_coupling_pair,
+            "min_coupling": self.min_coupling,
+            "sensitivities" + unit_suffix: self.sensitivities * factor,
+            "couplings": self.couplings,
+            "const_space": self.const_space,
+            "solution": self.solution,
+        }
+
+    def report_df(self, sensitivity_unit: Config.SensitivityUnit | None | bool = None) -> pd.DataFrame:
+        report_data = self.report(sensitivity_unit=sensitivity_unit)
+        return pd.DataFrame([report_data]).T
