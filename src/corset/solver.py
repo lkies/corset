@@ -6,6 +6,8 @@ from itertools import combinations_with_replacement
 import numpy as np
 from scipy import optimize
 
+from corset.analyze import SensitivityAnalysis
+
 from .core import Beam, Lens, OpticalSetup
 from .plot import plot_mode_match_solution
 
@@ -46,6 +48,10 @@ class ParametrizedSetup:
         if pos_index < len(positions):
             raise ValueError("Too many positions provided for the number of parametrized elements")
         return OpticalSetup(self.initial_beam, substituted_elements)
+
+    @cached_property
+    def free_elements(self) -> list[int]:
+        return [i for i, (pos, _) in enumerate(self.elements) if pos is None]
 
 
 @dataclass(frozen=True)
@@ -248,31 +254,15 @@ class ModeMatchingCandidate:
         filter_pred: Callable[["ModeMatchSolution"], bool],
         random_initial_positions: int,
         equal_setup_tol: float,
+        solution_per_population: int,
     ) -> list["ModeMatchSolution"]:
         initial_setups = [self.generate_initial_positions(randomize=False)]
         for _ in range(random_initial_positions):
             initial_setups.append(self.generate_initial_positions(randomize=True))
 
-        solver_constraints: list = [self.position_constraint]
-
-        if self.problem.constraints:
-            solver_constraints.append(self.beam_constraint)
-
-            # make initial setups satisfy beam constraints and filter out non feasible ones
-            filtered_setups = []
-            for x0 in initial_setups:
-                res = optimize.minimize(
-                    lambda x: np.max(self.beam_constraint.fun(x)),
-                    x0,
-                    constraints=solver_constraints,
-                    method="SLSQP",
-                    options={"ftol": 2e-1},
-                )
-                if np.all(self.beam_constraint.fun(res.x) <= self.beam_constraint.ub) and all(
-                    not np.allclose(res.x, x0) for x0 in filtered_setups
-                ):
-                    filtered_setups.append(res.x)
-            initial_setups = filtered_setups
+        solver_constraints = [self.position_constraint] + ([self.beam_constraint] if self.problem.constraints else [])
+        # if self.problem.constraints:
+        #     solver_constraints.append(self.beam_constraint)
 
         def objective(positions: np.ndarray) -> float:
             setup = self.parametrized_setup.substitute(positions)  # pyright: ignore[reportArgumentType]
@@ -287,7 +277,24 @@ class ModeMatchingCandidate:
 
         solutions = []
         solution_positions = []  # for this lens population
+        constrained_initial_setups = []
         for x0 in initial_setups:
+            if self.problem.constraints:
+                constrain_res = optimize.minimize(
+                    lambda x: np.max(self.beam_constraint.fun(x)),
+                    x0,
+                    constraints=solver_constraints,
+                    method="SLSQP",
+                    options={"ftol": 2e-1},
+                )
+                if not np.all(self.beam_constraint.fun(constrain_res.x) <= self.beam_constraint.ub) or any(
+                    not np.allclose(constrain_res.x, x0) for x0 in constrained_initial_setups
+                ):
+                    # failed to converge to a feasible setup or already tried this setup
+                    continue
+                constrained_initial_setups.append(constrain_res.x)
+                x0 = constrain_res.x
+
             res = optimize.minimize(objective, x0, constraints=solver_constraints)
             if not res.success:
                 continue
@@ -302,6 +309,9 @@ class ModeMatchingCandidate:
             if filter_pred(sol):  # pyright: ignore[reportCallIssue]
                 solutions.append(sol)
                 solution_positions.append(sol.positions)
+
+            if len(solutions) >= solution_per_population:
+                break
 
         return solutions
 
@@ -318,6 +328,12 @@ class ModeMatchSolution:
 
     plot = plot_mode_match_solution
 
+    @cached_property
+    def analysis(self) -> "SensitivityAnalysis":
+        from . import analyze
+
+        return analyze.SensitivityAnalysis(solution=self)
+
 
 # TODO should this be a method of ModeMatchingProblem?
 def mode_match(
@@ -330,6 +346,7 @@ def mode_match(
     constraints: list[Aperture | Passage] = [],  # noqa: B006
     filter_pred: Callable[[ModeMatchSolution], bool] | float | None = None,
     random_initial_positions: int = 0,
+    solution_per_population: int = 1,
     equal_setup_tol: float = 1e-3,
     random_seed: int = 0,
     # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
@@ -365,6 +382,7 @@ def mode_match(
                 filter_pred=filter_pred,  # pyright: ignore[reportArgumentType]
                 random_initial_positions=random_initial_positions,
                 equal_setup_tol=equal_setup_tol,
+                solution_per_population=solution_per_population,
             )
         )
 

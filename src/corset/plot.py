@@ -14,7 +14,7 @@ from matplotlib.ticker import FuncFormatter
 
 # prevent circular import for type annotation in function signature
 if TYPE_CHECKING:
-    from .core import Lens, OpticalSetup
+    from .core import OpticalSetup
     from .solver import ModeMatchSolution
 
 RELATIVE_MARGIN = 0.1
@@ -62,6 +62,7 @@ def plot_optical_setup(
     points: None | int | np.ndarray = None,
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict = {"color": "C0", "alpha": 0.5},  # noqa: B006
+    free_lenses: list[int] = [],  # noqa: B006
     # TODO add back other configuration options?
 ) -> OpticalSetupPlot:
     ax = ax or plt.gca()
@@ -90,7 +91,7 @@ def plot_optical_setup(
 
     # TODO factor out into plot lens function?
     lenses = []
-    for pos, lens in self.elements:
+    for i, (pos, lens) in enumerate(self.elements):
         color = "C2"
         zorder = 200
         if lens.left_margin or lens.right_margin:
@@ -114,6 +115,8 @@ def plot_optical_setup(
         )
         # TODO label and enumerate free lenses?
         label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length*1e3)}mm"
+        if i in free_lenses:
+            label_text = f"$L_{i}$: " + label_text
         label = ax.annotate(label_text, xy=(pos, w_max * (1 + 2 * RELATIVE_MARGIN)), va="center", ha="center")
         lenses.append((lens_col, label))
 
@@ -142,7 +145,7 @@ def plot_mode_match_solution(
 
     problem = self.candidate.problem
 
-    setup_plot = plot_optical_setup(self.setup, ax=ax)
+    setup_plot = plot_optical_setup(self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements)
     desired_plot = plot_optical_setup(OpticalSetup(problem.desired_beam, []), ax=ax, beam_kwargs={"color": "C1"})
 
     regions = []
@@ -175,6 +178,8 @@ def plot_mode_match_solution(
                 ec="none",
             )
             passages.append(ax.add_patch(rect))
+
+    ax.set_title(f"Optical Setup ({self.overlap*100:.2f}% mode overlap)")
 
     return ModeMatchingPlot(
         ax=ax,

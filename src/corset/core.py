@@ -1,11 +1,9 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import FuncFormatter
 
-from .plot import ModeMatchingPlot, OpticalSetupPlot, plot_optical_setup
+from .plot import OpticalSetupPlot, plot_optical_setup
 
 
 # TODO should beam include wavelength or should it be part of the larger setup?
