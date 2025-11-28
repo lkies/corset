@@ -6,10 +6,9 @@ from itertools import combinations_with_replacement
 import numpy as np
 from scipy import optimize
 
-from corset.analyze import SensitivityAnalysis
-
+from .analyze import SensitivityAnalysis
 from .core import Beam, Lens, OpticalSetup
-from .plot import plot_mode_match_solution
+from .plot import plot_mode_match_solution, plot_reachability, plot_sensitivity
 
 
 @dataclass(frozen=True)
@@ -327,6 +326,8 @@ class ModeMatchSolution:
         return self.candidate.parametrized_setup.substitute(self.positions)  # pyright: ignore[reportArgumentType]
 
     plot = plot_mode_match_solution
+    plot_reachability = plot_reachability
+    plot_sensitivity = plot_sensitivity
 
     @cached_property
     def analysis(self) -> "SensitivityAnalysis":
