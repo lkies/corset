@@ -10,31 +10,30 @@ from .plot import OpticalSetupPlot, plot_optical_setup
 # TODO refractive index?
 @dataclass(frozen=True)
 class Beam:
-    ray: np.ndarray  # [x, theta]
+    ray: np.ndarray  # [(z-focus)+ j*rayleigh_range, 0]
     z_offset: float
     wavelength: float
     # range: tuple[float, float] # TODO is this necessary
 
     @property
     def waist(self) -> float:
-        return self.wavelength / (np.pi * abs(self.ray[1]))  # [x, theta]
+        return np.sqrt(self.rayleigh_range * self.wavelength / np.pi)
 
     @property
     def rayleigh_range(self) -> float:
-        if self.wavelength is None:
-            raise ValueError("Wavelength must be set to compute rayleigh range")
-        return np.pi * (self.waist**2) / self.wavelength
+        return np.imag(self.ray[0])
 
     @property
     def focus(self) -> float:
-        return self.z_offset - (self.ray[0] / self.ray[1])
+        return self.z_offset - np.real(self.ray[0])
 
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
         return self.waist * np.sqrt(1 + ((z - self.focus) / self.rayleigh_range) ** 2)
 
     @staticmethod
-    def from_gauss(waist: float, z_offset: float, wavelength: float) -> "Beam":
-        return Beam(ray=np.array([0, wavelength / (np.pi * waist)]), z_offset=z_offset, wavelength=wavelength)
+    def from_gauss(waist: float, focus: float, wavelength: float) -> "Beam":
+        rayleigh_range = np.pi * (waist**2) / wavelength
+        return Beam(ray=np.array([0 + 1j * rayleigh_range, 1]), z_offset=focus, wavelength=wavelength)
 
     def plot(self, **kwargs) -> OpticalSetupPlot:  # pyright: ignore[reportPrivateImportUsage]
         return OpticalSetup(self, []).plot(**kwargs)
@@ -68,13 +67,14 @@ class OpticalSetup:
 
     @cached_property
     def rays(self) -> list[np.ndarray]:
-        prev_ray = self.initial_beam.ray
+        ray = self.initial_beam.ray
         prev_pos = self.initial_beam.z_offset
-        rays = [prev_ray]
+        rays = [ray]
         for pos, element in self.elements:
             distance = pos - prev_pos
-            prev_ray = element.matrix @ free_space(distance) @ prev_ray
-            rays.append(prev_ray)
+            ray = element.matrix @ free_space(distance) @ ray
+            ray = np.array([ray[0] / ray[1], 1])  # normalize
+            rays.append(ray)
             prev_pos = pos
         return rays
 

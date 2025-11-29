@@ -305,7 +305,7 @@ def plot_reachability(
 def plot_sensitivity(
     self: "ModeMatchSolution",
     dimensions: tuple[int, int] | tuple[int, int, int] | None = None,
-    worst_overlap: float = 0.95,
+    worst_overlap: float = 0.98,
     x_range: tuple[float, float] | None = None,
     y_range: tuple[float, float] | None = None,
     z_range: tuple[float, float] | None = None,

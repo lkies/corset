@@ -358,6 +358,9 @@ def mode_match(
         setup = OpticalSetup(setup, [])
     verify_regions(regions, min_elements, max_elements)
 
+    if setup.initial_beam.wavelength != desired_beam.wavelength:
+        raise ValueError("Setup initial beam and desired beam must have the same wavelength")
+
     if isinstance(filter_pred, float):
         min_overlap = filter_pred
         filter_pred = lambda s: s.overlap >= min_overlap
