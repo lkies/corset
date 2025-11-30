@@ -2,13 +2,22 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import combinations_with_replacement
+from typing import cast, overload
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy import optimize
 
 from .analyze import SensitivityAnalysis
 from .core import Beam, Lens, OpticalSetup
-from .plot import plot_mode_match_solution, plot_reachability, plot_sensitivity
+from .plot import (
+    fig_to_png,
+    plot_mode_match_solution_all,
+    plot_mode_match_solution_setup,
+    plot_reachability,
+    plot_sensitivity,
+)
 
 
 @dataclass(frozen=True)
@@ -248,21 +257,23 @@ class ModeMatchingCandidate:
             lambda x, pos=positions, setup=self.parametrized_setup: setup.substitute(x).radius(pos) / radii, 0, 1
         )
 
+    @cached_property
+    def constraints(self) -> list[optimize.NonlinearConstraint | optimize.LinearConstraint]:
+        return [self.position_constraint] + ([self.beam_constraint] if self.problem.constraints else [])
+
     def optimize(
         self,
-        filter_pred: Callable[["ModeMatchSolution"], bool],
+        filter_pred: Callable[["ModeMatchingSolution"], bool],
         random_initial_positions: int,
         equal_setup_tol: float,
         solution_per_population: int,
-    ) -> list["ModeMatchSolution"]:
+        # optimize_coupling: bool,
+    ) -> list["ModeMatchingSolution"]:
         initial_setups = [self.generate_initial_positions(randomize=False)]
         for _ in range(random_initial_positions):
             initial_setups.append(self.generate_initial_positions(randomize=True))
 
-        solver_constraints = [self.position_constraint] + ([self.beam_constraint] if self.problem.constraints else [])
-        # if self.problem.constraints:
-        #     solver_constraints.append(self.beam_constraint)
-
+        # TODO unify this with the make_mode_overlap function in analyze.py?
         def objective(positions: np.ndarray) -> float:
             setup = self.parametrized_setup.substitute(positions)  # pyright: ignore[reportArgumentType]
             final_beam = setup.beams[-1]
@@ -278,11 +289,14 @@ class ModeMatchingCandidate:
         solution_positions = []  # for this lens population
         constrained_initial_setups = []
         for x0 in initial_setups:
+            if len(solutions) >= solution_per_population:
+                break
+
             if self.problem.constraints:
                 constrain_res = optimize.minimize(
                     lambda x: np.max(self.beam_constraint.fun(x)),
                     x0,
-                    constraints=solver_constraints,
+                    constraints=[self.position_constraint],
                     method="SLSQP",
                     options={"ftol": 2e-1},
                 )
@@ -294,11 +308,11 @@ class ModeMatchingCandidate:
                 constrained_initial_setups.append(constrain_res.x)
                 x0 = constrain_res.x
 
-            res = optimize.minimize(objective, x0, constraints=solver_constraints)
+            res = optimize.minimize(objective, x0, constraints=self.constraints)
             if not res.success:
                 continue
 
-            sol = ModeMatchSolution(
+            sol = ModeMatchingSolution(
                 candidate=self,
                 overlap=-res.fun,
                 positions=res.x,
@@ -309,14 +323,22 @@ class ModeMatchingCandidate:
                 solutions.append(sol)
                 solution_positions.append(sol.positions)
 
-            if len(solutions) >= solution_per_population:
-                break
+            # if optimize_coupling and sol.overlap >= 1 - 1e-3 and len(solutions) < solution_per_population:
+            #     improved_sol = sol.optimize_coupling()
+            #     if improved_sol is not None and filter_pred(improved_sol):  # pyright: ignore[reportCallIssue]
+            #         if any(
+            #             np.allclose(improved_sol.positions, pos, atol=equal_setup_tol, rtol=0)
+            #             for pos in solution_positions
+            #         ):
+            #             continue
+            #         solutions.append(improved_sol)
+            #         solution_positions.append(improved_sol.positions)
 
         return solutions
 
 
 @dataclass(frozen=True)
-class ModeMatchSolution:
+class ModeMatchingSolution:
     candidate: ModeMatchingCandidate
     overlap: float
     positions: np.ndarray
@@ -325,15 +347,99 @@ class ModeMatchSolution:
     def setup(self) -> OpticalSetup:
         return self.candidate.parametrized_setup.substitute(self.positions)  # pyright: ignore[reportArgumentType]
 
-    plot = plot_mode_match_solution
+    plot_setup = plot_mode_match_solution_setup
     plot_reachability = plot_reachability
     plot_sensitivity = plot_sensitivity
+    plot_all = plot_mode_match_solution_all
+
+    def _repr_png_(self) -> bytes:
+        fig, _ = self.plot_all()
+        return fig_to_png(fig)
 
     @cached_property
     def analysis(self) -> "SensitivityAnalysis":
         from . import analyze
 
         return analyze.SensitivityAnalysis(solution=self)
+
+    def optimize_coupling(
+        self, min_abs_improvement: float = 0.1, min_rel_improvement: float = 0.5
+    ) -> "ModeMatchingSolution | None":
+        from . import analyze
+
+        if not len(self.positions) > 2:
+            return None
+            # raise ValueError("Need at least 3 free parameters to optimize coupling")
+        if self.overlap < 1 - 1e-3:
+            raise ValueError("Can only optimize coupling for solutions ~100% mode overlap")
+
+        focus_and_waist = analyze.make_focus_and_waist(self)
+        desired_beam = self.candidate.problem.desired_beam
+        desired_focus_and_waist = np.array([desired_beam.focus, desired_beam.waist])
+        mode_matching_constraint = optimize.NonlinearConstraint(
+            lambda x: focus_and_waist(x) - desired_focus_and_waist, [0, 0], [0, 0]
+        )
+
+        res = optimize.minimize(
+            lambda x: ModeMatchingSolution(
+                candidate=self.candidate,
+                overlap=1,
+                positions=x,
+            ).analysis.min_coupling,
+            self.positions,
+            constraints=[*self.candidate.constraints, mode_matching_constraint],
+        )
+
+        if not res.success:
+            return None
+
+        mode_matching = analyze.make_mode_overlap(self)(res.x)
+        new_solution = ModeMatchingSolution(
+            candidate=self.candidate,
+            overlap=mode_matching,
+            positions=res.x,
+        )
+        old_coupling = self.analysis.min_coupling
+        new_coupling = new_solution.analysis.min_coupling
+        if (old_coupling - new_coupling) > min_abs_improvement or new_coupling / old_coupling < min_rel_improvement:
+            return new_solution
+        return None
+
+
+@dataclass(frozen=True)
+class SolutionList:
+    solutions: list[ModeMatchingSolution]
+
+    @overload
+    def __getitem__(self, index: int) -> "ModeMatchingSolution": ...
+
+    @overload
+    def __getitem__(self, index: slice | list[int]) -> "SolutionList": ...
+
+    def __getitem__(self, index: int | slice | list[int]) -> "ModeMatchingSolution | SolutionList":
+        if isinstance(index, int):
+            return self.solutions[index]
+        else:
+            return SolutionList(solutions=np.array(self.solutions)[index].tolist())
+
+    def __len__(self) -> int:
+        return len(self.solutions)
+
+    def __iter__(self):
+        return iter(self.solutions)
+
+    @cached_property
+    def df(self) -> pd.DataFrame:
+        return pd.DataFrame([sol.analysis.summary() for sol in self.solutions])
+
+    def _repr_html_(self) -> str:
+        return self.df.to_html(notebook=True)
+
+    def query(self, expr: str) -> "SolutionList":
+        return self[cast(list[int], self.df.query(expr).index)]
+
+    def sort_values(self, by: str | list[str], ascending: bool = True) -> "SolutionList":
+        return self[cast(list[int], self.df.sort_values(by=by, ascending=ascending).index)]
 
 
 # TODO should this be a method of ModeMatchingProblem?
@@ -345,11 +451,12 @@ def mode_match(
     min_elements: int = 0,
     max_elements: int = float("inf"),  # pyright: ignore[reportArgumentType]
     constraints: list[Aperture | Passage] = [],  # noqa: B006
-    filter_pred: Callable[[ModeMatchSolution], bool] | float | None = None,
+    filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = None,
     random_initial_positions: int = 0,
     solution_per_population: int = 1,
     equal_setup_tol: float = 1e-3,
     random_seed: int = 0,
+    # optimize_coupling: bool = False,
     # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
     # TODO other solver options
 ):
@@ -387,10 +494,11 @@ def mode_match(
                 random_initial_positions=random_initial_positions,
                 equal_setup_tol=equal_setup_tol,
                 solution_per_population=solution_per_population,
+                # optimize_coupling=optimize_coupling,
             )
         )
 
-    return sorted(solutions, key=lambda s: s.overlap, reverse=True)
+    return SolutionList(solutions)
 
     # TODO some sanity checks to ensure the desired beam is after the last setup part
     # TODO other checks like non overlapping regions

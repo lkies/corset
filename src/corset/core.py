@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from functools import cached_property
 
+import matplotlib.pyplot as plt
 import numpy as np
 
-from .plot import OpticalSetupPlot, plot_optical_setup
+from .plot import OpticalSetupPlot, fig_to_png, plot_optical_setup
 
 
 # TODO should beam include wavelength or should it be part of the larger setup?
@@ -38,6 +39,11 @@ class Beam:
     def plot(self, **kwargs) -> OpticalSetupPlot:  # pyright: ignore[reportPrivateImportUsage]
         return OpticalSetup(self, []).plot(**kwargs)
 
+    def _repr_png_(self) -> bytes:
+        fig, ax = plt.subplots()
+        self.plot(ax=ax)
+        return fig_to_png(fig)
+
 
 def free_space(distance: float) -> np.ndarray:
     return np.array([[1, distance], [0, 1]])
@@ -59,12 +65,16 @@ class Lens:
     def matrix(self) -> np.ndarray:
         return thin_lens(self.focal_length)
 
+    def __str__(self) -> str:
+        return self.name if self.name is not None else f"f={round(self.focal_length*1e3)}mm"
+
 
 @dataclass(frozen=True)
 class OpticalSetup:
     initial_beam: Beam
     elements: list[tuple[float, Lens]]
 
+    # TODO eliminate this and just put it into beams?
     @cached_property
     def rays(self) -> list[np.ndarray]:
         ray = self.initial_beam.ray
@@ -89,6 +99,11 @@ class OpticalSetup:
         if not np.isscalar(z):
             return np.array([self.radius(zi) for zi in z])  # pyright: ignore[reportGeneralTypeIssues]
         index = np.searchsorted([pos for pos, _ in self.elements], z)
-        return self.beams[index].radius(z)  # pyright: ignore[reportArgumentType]
+        return self.beams[index].radius(z)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     plot = plot_optical_setup
+
+    def _repr_png_(self) -> bytes:
+        fig, ax = plt.subplots()
+        self.plot(ax=ax)
+        return fig_to_png(fig)
