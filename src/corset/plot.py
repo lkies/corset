@@ -14,7 +14,6 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 from matplotlib.text import Annotation
 from matplotlib.ticker import FuncFormatter
-from scipy.differentiate import jacobian
 
 from .config import Config
 
@@ -65,8 +64,6 @@ class ModeMatchingPlot:
     regions: list[Rectangle]
     apertures: list[Line2D]
     passages: list[Rectangle]
-
-    # apertures
 
 
 def plot_optical_setup(
@@ -240,7 +237,7 @@ def plot_reachability(
     ax: Axes | None = None,
 ) -> ReachabilityPlot:
     # TODO add reachability analysis plot class
-    from .analyze import make_focus_and_waist, vector_partial, wrap_for_differentiate
+    from .analyze import make_focus_and_waist, vector_partial
     from .solver import mode_overlap
 
     ax = ax or plt.gca()
@@ -311,12 +308,12 @@ def plot_reachability(
     res = ax.contourf(focuses_grid, waists_grid, overlap * 100, levels=levels, colors=colors, alpha=0.5)
     cb = ax.figure.colorbar(res, label="Mode overlap (%)")
 
-    jac = jacobian(wrap_for_differentiate(make_focus_and_waist(self)), self.positions, initial_step=1e-2)
+    jacobian = self.analysis.focus_and_waist_jacobian
 
-    ax.set_xlabel(rf"$\Delta z_0$ in mm ($\nabla z_0$=[{' '.join(f'{x:.3f}' for x in jac.df[0])}])")
+    ax.set_xlabel(rf"$\Delta z_0$ in mm ($\nabla z_0$=[{' '.join(f'{x:.3f}' for x in jacobian[0])}])")
     ax.xaxis.set_major_formatter(milli_formatter)
 
-    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jac.df[1]*1e3)}]e-3")
+    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jacobian[1]*1e3)}]e-3")
     ax.yaxis.set_major_formatter(micro_formatter)
 
     ax.set_title("Reachability Analysis")

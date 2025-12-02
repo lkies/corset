@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
-from scipy.differentiate import hessian
+from scipy.differentiate import hessian, jacobian
 
 from .config import Config
 
@@ -89,6 +89,14 @@ class SensitivityAnalysis:
         return hess_res.ddf
 
     @cached_property
+    def focus_and_waist_jacobian(self) -> np.ndarray:
+        waist_and_focus = wrap_for_differentiate(make_focus_and_waist(self.solution))
+        jac_res = jacobian(waist_and_focus, self.solution.positions, initial_step=1e-2)
+        if np.any(jac_res.status != 0):
+            warnings.warn(f"Jacobian calculation did not converge: {jac_res.status}", stacklevel=2)
+        return jac_res.df
+
+    @cached_property
     def couplings(self) -> np.ndarray:
         normalizer = 1 / np.sqrt(-np.diag(self.hessian))
         return -self.hessian * np.outer(normalizer, normalizer)
@@ -143,6 +151,14 @@ class SensitivityAnalysis:
     def const_space(self) -> list[np.ndarray]:
         eigs = np.linalg.eigh(self.hessian)
         return list(eigs.eigenvectors.T[np.argsort(eigs.eigenvalues)[2:]])
+
+    @cached_property
+    def grad_focus(self) -> np.ndarray:
+        return self.focus_and_waist_jacobian[0]
+
+    @cached_property
+    def grad_waist(self) -> np.ndarray:
+        return self.focus_and_waist_jacobian[1]
 
     def summary(self, sensitivity_unit: Config.SensitivityUnit | None | bool = None) -> dict:
         sensitivity_unit = cast(Config.SensitivityUnit, sensitivity_unit or Config.sensitivity_unit)
