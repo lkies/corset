@@ -86,7 +86,7 @@ class Passage:  # PassageConstraint ? or some other better name
         return (Aperture(self.left, self.radius), Aperture(self.right, self.radius))
 
 
-def mode_overlap(waist_a: float, waist_b: float, delta_z: float, wavelength: float) -> float:
+def mode_overlap(delta_z: float, waist_a: float, waist_b: float, wavelength: float) -> float:
     return (
         2 * np.pi * waist_a * waist_b / np.sqrt(wavelength**2 * delta_z**2 + np.pi**2 * (waist_a**2 + waist_b**2) ** 2)
     )
@@ -279,9 +279,9 @@ class ModeMatchingCandidate:
             final_beam = setup.beams[-1]
             desired_beam = self.problem.desired_beam
             return -mode_overlap(
+                final_beam.focus - desired_beam.focus,
                 final_beam.waist,
                 desired_beam.waist,
-                final_beam.focus - desired_beam.focus,
                 final_beam.wavelength,  # pyright: ignore[reportArgumentType]
             )
 

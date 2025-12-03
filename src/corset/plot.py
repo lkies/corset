@@ -297,9 +297,9 @@ def plot_reachability(
     grid_n = 50
     focuses_grid, waists_grid = np.meshgrid(np.linspace(*ax.get_xlim(), grid_n), np.linspace(*ax.get_ylim(), grid_n))
     overlap = mode_overlap(
+        focuses_grid,  # pyright: ignore[reportArgumentType]
         self.candidate.problem.desired_beam.waist,
         waists_grid,  # pyright: ignore[reportArgumentType]
-        focuses_grid,  # pyright: ignore[reportArgumentType]
         self.candidate.problem.setup.initial_beam.wavelength,
     )
 

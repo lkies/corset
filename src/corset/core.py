@@ -3,6 +3,7 @@ from functools import cached_property
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
 
 from .plot import OpticalSetupPlot, fig_to_png, plot_optical_setup
 
@@ -14,6 +15,7 @@ class Beam:
     ray: np.ndarray  # [(z-focus)+ j*rayleigh_range, 0]
     z_offset: float
     wavelength: float
+    gauss_cov: np.ndarray | None = None
     # range: tuple[float, float] # TODO is this necessary
 
     @property
@@ -31,10 +33,18 @@ class Beam:
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
         return self.waist * np.sqrt(1 + ((z - self.focus) / self.rayleigh_range) ** 2)
 
-    @staticmethod
-    def from_gauss(waist: float, focus: float, wavelength: float) -> "Beam":
+    @classmethod
+    def from_gauss(cls, focus: float, waist: float, wavelength: float, cov: np.ndarray | None = None) -> "Beam":
         rayleigh_range = np.pi * (waist**2) / wavelength
-        return Beam(ray=np.array([0 + 1j * rayleigh_range, 1]), z_offset=focus, wavelength=wavelength)
+        return cls(ray=np.array([0 + 1j * rayleigh_range, 1]), z_offset=focus, wavelength=wavelength, gauss_cov=cov)
+
+    @classmethod
+    def fit(cls, zs: np.ndarray, rs: np.ndarray, wavelength: float, p0: tuple[float, float] | None = None) -> "Beam":
+        if p0 is None:  # TODO is this a good idea?
+            p0 = (zs[np.argmin(rs)], np.min(rs))
+        # yes using the class itself is pretty inefficient but its convenient and not performance critical
+        (focus, waist), cov = curve_fit(lambda z, f, w: cls.from_gauss(f, w, wavelength).radius(z), zs, rs, p0=p0)
+        return cls.from_gauss(focus, waist, wavelength, cov=cov)
 
     def plot(self, **kwargs) -> OpticalSetupPlot:  # pyright: ignore[reportPrivateImportUsage]
         return OpticalSetup(self, []).plot(**kwargs)
@@ -103,6 +113,7 @@ class OpticalSetup:
 
     plot = plot_optical_setup
 
+    # TODO cache this (and the other repr png functions)?
     def _repr_png_(self) -> bytes:
         fig, ax = plt.subplots()
         self.plot(ax=ax)

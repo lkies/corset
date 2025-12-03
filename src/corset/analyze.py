@@ -53,9 +53,9 @@ def make_mode_overlap(solution: "ModeMatchingSolution") -> Callable[[np.ndarray]
         final_beam = setup.beams[-1]
         problem = solution.candidate.problem
         return solver.mode_overlap(
+            final_beam.focus - problem.desired_beam.focus,
             final_beam.waist,
             problem.desired_beam.waist,
-            final_beam.focus - problem.desired_beam.focus,
             problem.setup.initial_beam.wavelength,
         )
 
@@ -178,6 +178,8 @@ class SensitivityAnalysis:
             "sensitivities": self.sensitivities * factor,
             "couplings": self.couplings,
             "const_space": self.const_space,
+            "grad_focus": self.grad_focus,
+            "grad_waist": self.grad_waist,
             "sensitivity_unit": sensitivity_unit,
             "solution": self.solution,
         }
