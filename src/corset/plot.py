@@ -407,14 +407,15 @@ def plot_sensitivity(
         ax.legend(handles=handles).set_zorder(1000)
 
     unit = Config.sensitivity_unit
-    sens_x = self.analysis.sensitivities[dimensions[0], dimensions[0]] * unit.value.factor
-    sens_y = self.analysis.sensitivities[dimensions[1], dimensions[1]] * unit.value.factor
-    ax.set_xlabel(rf"$\Delta x_{{{dimensions[0]}}}$ in mm (s={sens_x:.2f}${unit.value.tex}$)")
-    ax.set_ylabel(rf"$\Delta x_{{{dimensions[1]}}}$ in mm (s={sens_y:.2f}${unit.value.tex}$)")
+    dims = dimensions
+    sens_x = self.analysis.sensitivities[dims[0], dims[0]] * unit.value.factor
+    sens_y = self.analysis.sensitivities[dims[1], dims[1]] * unit.value.factor
+    ax.set_xlabel(rf"$\Delta x_{{{dims[0]}}}$ in mm ($s_{{{str(dims[0])*2}}}={sens_x:.2f}{unit.value.tex}$)")
+    ax.set_ylabel(rf"$\Delta x_{{{dims[1]}}}$ in mm ($s_{{{str(dims[1])*2}}}={sens_y:.2f}{unit.value.tex}$)")
     ax.xaxis.set_major_formatter(milli_formatter)
     ax.yaxis.set_major_formatter(milli_formatter)
 
-    ax.set_title(f"Sensitivity Analysis (r={self.analysis.min_coupling*100:.2f}%)")
+    ax.set_title(rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}={self.analysis.min_coupling*100:.2f}\%$)")
 
     return SensitivityPlot(ax=ax, contours=contours, colorbar=colorbar, handles=handles)
 
