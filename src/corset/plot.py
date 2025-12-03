@@ -237,7 +237,7 @@ def plot_reachability(
     ax: Axes | None = None,
 ) -> ReachabilityPlot:
     # TODO add reachability analysis plot class
-    from .analyze import make_focus_and_waist, vector_partial
+    from .analysis import make_focus_and_waist, vector_partial
     from .solver import mode_overlap
 
     ax = ax or plt.gca()
@@ -332,7 +332,7 @@ def plot_sensitivity(
     force_contours: bool = False,
     ax: Axes | None = None,
 ) -> SensitivityPlot:
-    from .analyze import make_mode_overlap, vector_partial
+    from .analysis import make_mode_overlap, vector_partial
 
     ax = ax or plt.gca()
 

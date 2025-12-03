@@ -4,12 +4,11 @@ from functools import cached_property
 from itertools import combinations_with_replacement
 from typing import cast, overload
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import optimize
 
-from .analyze import SensitivityAnalysis
+from .analysis import SensitivityAnalysis
 from .core import Beam, Lens, OpticalSetup
 from .plot import (
     fig_to_png,
@@ -358,14 +357,14 @@ class ModeMatchingSolution:
 
     @cached_property
     def analysis(self) -> "SensitivityAnalysis":
-        from . import analyze
+        from . import analysis
 
-        return analyze.SensitivityAnalysis(solution=self)
+        return analysis.SensitivityAnalysis(solution=self)
 
     def optimize_coupling(
         self, min_abs_improvement: float = 0.1, min_rel_improvement: float = 0.5
     ) -> "ModeMatchingSolution | None":
-        from . import analyze
+        from . import analysis
 
         if not len(self.positions) > 2:
             return None
@@ -373,7 +372,7 @@ class ModeMatchingSolution:
         if self.overlap < 1 - 1e-3:
             raise ValueError("Can only optimize coupling for solutions ~100% mode overlap")
 
-        focus_and_waist = analyze.make_focus_and_waist(self)
+        focus_and_waist = analysis.make_focus_and_waist(self)
         desired_beam = self.candidate.problem.desired_beam
         desired_focus_and_waist = np.array([desired_beam.focus, desired_beam.waist])
         mode_matching_constraint = optimize.NonlinearConstraint(
@@ -393,7 +392,7 @@ class ModeMatchingSolution:
         if not res.success:
             return None
 
-        mode_matching = analyze.make_mode_overlap(self)(res.x)
+        mode_matching = analysis.make_mode_overlap(self)(res.x)
         new_solution = ModeMatchingSolution(
             candidate=self.candidate,
             overlap=mode_matching,
