@@ -22,6 +22,8 @@ class Config:
     overlap_colormap = "turbo"
     overwrite_dark_theme = None
 
+    # TODO specify defaults for plotting functions here instead of in the function signatures?
+
     @classmethod
     def mpl_is_dark(cls) -> bool:
         if cls.overwrite_dark_theme is not None:

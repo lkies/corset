@@ -33,6 +33,7 @@ exclude_patterns = []
 autodoc_member_order = "groupwise"
 autodoc_typehints = "both"
 typehints_use_signature_return = True
+typehints_defaults = "comma"
 
 
 # -- Options for HTML output -------------------------------------------------

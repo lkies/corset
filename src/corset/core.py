@@ -1,4 +1,11 @@
-"""Core classes for representing and simulating Gaussian beams and optical setups."""
+"""Core classes for representing and simulating Gaussian beams and optical setups.
+
+Setups are represented as :class:`OpticalSetup` instances which propagate an initial :class:`Beam`
+through a sequence of :class:`Lens` elements. This yields a piecewise defined beam radius made
+from Gaussian beam segments between the elements. The individual beams are represented using
+a complex beam parameter combined with an axial offset and wavelength. The beams are propagated
+using the ray transfer matrix method for Gaussian beams, see `here <https://en.wikipedia.org/wiki/Ray_transfer_matrix_analysis#Gaussian_beams>`_.
+"""
 
 from dataclasses import InitVar, dataclass
 from functools import cached_property

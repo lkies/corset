@@ -72,7 +72,7 @@ def make_focus_and_waist(solution: "ModeMatchingSolution") -> Callable[[np.ndarr
 
 
 @dataclass(frozen=True)
-class SensitivityAnalysis:
+class ModeMatchingAnalysis:
     solution: "ModeMatchingSolution"
 
     @cached_property
