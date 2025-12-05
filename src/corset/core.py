@@ -15,28 +15,32 @@ from .plot import OpticalSetupPlot, fig_to_png, plot_optical_setup
 # TODO refractive index?
 @dataclass(frozen=True)
 class Beam:
-    """Paraxial Gaussian beam representation."""
+    """Paraxial Gaussian beam representation.
 
-    ray: np.ndarray  #: 2-element array representing the complex ray vector [q, 1]
+    Supports _repr_png_ for IPython environments."""
+
+    beam_parameter: complex
+    """Complex beam parameter :math:`q = z - z_0 + i z_R` defined at position :math:`z`
+    with focus at :math:`z_0` and Rayleigh range :math:`z_R`."""
     z_offset: float  #: Axial position at which the ray is defined
     wavelength: float  #: Wavelength of the beam
-    gauss_cov: np.ndarray | None = None  #: Optional covariance matrix for focus position and waist
+    gauss_cov: np.ndarray | None = None  #: Covariance matrix for focus position and waist
     # range: tuple[float, float] # TODO is this necessary
 
-    @property
+    @cached_property
     def waist(self) -> float:
         """Waist radius"""
         return np.sqrt(self.rayleigh_range * self.wavelength / np.pi)
 
-    @property
+    @cached_property
     def rayleigh_range(self) -> float:
         """Rayleigh range"""
-        return np.imag(self.ray[0])
+        return abs(self.beam_parameter.imag)
 
-    @property
+    @cached_property
     def focus(self) -> float:
         """Axial position of the beam focus i.e. waist position"""
-        return self.z_offset - np.real(self.ray[0])
+        return self.z_offset - self.beam_parameter.real
 
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
         """Compute the beam radius at axial position(s).
@@ -63,7 +67,7 @@ class Beam:
         """
 
         rayleigh_range = np.pi * (waist**2) / wavelength
-        return cls(ray=np.array([0 + 1j * rayleigh_range, 1]), z_offset=focus, wavelength=wavelength, gauss_cov=cov)
+        return cls(beam_parameter=1j * rayleigh_range, z_offset=focus, wavelength=wavelength, gauss_cov=cov)
 
     @classmethod
     def fit(cls, zs: np.ndarray, rs: np.ndarray, wavelength: float, p0: tuple[float, float] | None = None) -> "Beam":
@@ -133,7 +137,9 @@ class Lens:
 
 @dataclass(frozen=True)
 class OpticalSetup:
-    """Optical setup described by an initial beam and a sequence of elements."""
+    """Optical setup described by an initial beam and a sequence of elements.
+
+    Supports _repr_png_ for IPython environments."""
 
     initial_beam: Beam  #: Initial beam before left most element
     elements: list[tuple[float, Lens]]  #: Optical elements as (position, element) tuples sorted by position
@@ -145,25 +151,25 @@ class OpticalSetup:
 
     # TODO eliminate this and just put it into beams?
     @cached_property
-    def rays(self) -> list[np.ndarray]:
+    def beam_parameters(self) -> list[complex]:
         """Compute the ray vectors between elements including before the first element and after the last."""
-        ray = self.initial_beam.ray
+        q = self.initial_beam.beam_parameter
         prev_pos = self.initial_beam.z_offset
-        rays = [ray]
+        beam_parameters = [q]
         for pos, element in self.elements:
-            distance = pos - prev_pos
-            ray = element.matrix @ self._free_space(distance) @ ray
-            ray = np.array([ray[0] / ray[1], 1])  # normalize
-            rays.append(ray)
+            q += pos - prev_pos  # free space propagation
+            vec = element.matrix @ np.array([q, 1])  # lens transformation
+            q = vec[0] / vec[1]  # normalize
+            beam_parameters.append(q)
             prev_pos = pos
-        return rays
+        return beam_parameters
 
     @cached_property
     def beams(self) -> list[Beam]:
         """Compute the Beam instances between elements including before the first element and after the last."""
         return [self.initial_beam] + [
-            Beam(ray=ray, z_offset=pos, wavelength=self.initial_beam.wavelength)
-            for (pos, _), ray in zip(self.elements, self.rays[1:], strict=True)
+            Beam(beam_parameter=param, z_offset=pos, wavelength=self.initial_beam.wavelength)
+            for (pos, _), param in zip(self.elements, self.beam_parameters[1:], strict=True)
         ]
 
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
@@ -180,7 +186,3 @@ class OpticalSetup:
         fig, ax = plt.subplots()
         self.plot(ax=ax)
         return fig_to_png(fig)
-
-    @staticmethod
-    def _free_space(distance: float) -> np.ndarray:
-        return np.array([[1, distance], [0, 1]])

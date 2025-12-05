@@ -301,9 +301,10 @@ class ModeMatchingCandidate:
         # TODO unify this with the make_mode_overlap function in analyze.py?
         def objective(positions: np.ndarray) -> float:
             setup = self.parametrized_setup.substitute(positions, validate=False)  # pyright: ignore[reportArgumentType]
-            # final_beam = setup.beams[-1]
             initial_beam = self.problem.setup.initial_beam
-            final_beam = Beam(setup.rays[-1], z_offset=setup.elements[-1][0], wavelength=initial_beam.wavelength)
+            final_beam = Beam(
+                setup.beam_parameters[-1], z_offset=setup.elements[-1][0], wavelength=initial_beam.wavelength
+            )
             desired_beam = self.problem.desired_beam
             return -mode_overlap(
                 final_beam.focus - desired_beam.focus,
