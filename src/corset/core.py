@@ -2,6 +2,7 @@
 
 from dataclasses import InitVar, dataclass
 from functools import cached_property
+from itertools import pairwise
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -115,6 +116,12 @@ class Lens:
     right_margin: float = 0  #: Physical size to the right of the focal plane
     name: str | None = None  #: Name for reference and plotting
 
+    def __post_init__(self):
+        if self.focal_length == 0:
+            raise ValueError("Focal length cannot be zero.")
+        if self.left_margin + self.right_margin < 0:
+            raise ValueError("Lens must have non-negative physical size.")  # focal plane outside physical lens is ok
+
     @cached_property
     def matrix(self) -> np.ndarray:
         """ABCD matrix of the lens element."""
@@ -133,9 +140,7 @@ class OpticalSetup:
     validate: InitVar[bool] = True  #: Validate that elements are sorted by position
 
     def __post_init__(self, validate: bool) -> None:
-        if validate and not all(
-            left < right for (left, _), (right, _) in zip(self.elements[:-1], self.elements[1:], strict=True)
-        ):
+        if validate and not all(left < right for (left, _), (right, _) in pairwise(self.elements)):
             raise ValueError("Optical elements must be sorted by position.")
 
     # TODO eliminate this and just put it into beams?

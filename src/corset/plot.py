@@ -86,9 +86,14 @@ def plot_optical_setup(
         if not limits:
             all_bounds = [
                 self.beams[0].focus - self.beams[0].rayleigh_range,
+                self.beams[-1].focus + self.beams[-1].rayleigh_range,
+                *(),
                 *lens_positions,
-                self.beams[-1].focus + self.beams[0].rayleigh_range,
             ]
+            if self.elements:
+                all_bounds.append(self.elements[0][0] - self.beams[0].rayleigh_range)
+                all_bounds.append(self.elements[-1][0] + self.beams[-1].rayleigh_range)
+
             limits = (min(all_bounds), max(all_bounds))
 
         num_points = points if isinstance(points, int) else 500

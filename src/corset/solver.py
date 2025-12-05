@@ -1,8 +1,8 @@
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from functools import cached_property
-from itertools import combinations_with_replacement
-from typing import cast, overload
+from itertools import combinations_with_replacement, pairwise
+from typing import Any, cast, overload
 
 import numpy as np
 import pandas as pd
@@ -32,7 +32,7 @@ class Region:
             raise ValueError("Region right boundary must be greater than left boundary")
         if self.min_elements < 0:
             raise ValueError("min_elements cannot be negative")
-        if self.max_elements is not None and self.max_elements < self.min_elements:
+        if self.max_elements < self.min_elements:
             raise ValueError("max_elements cannot be less than min_elements")
 
 
@@ -66,6 +66,10 @@ class Aperture:  # ApertureConstraint ?
     position: float
     radius: float
 
+    def __post_init__(self):
+        if self.radius <= 0:
+            raise ValueError("Aperture radius must be positive")
+
     def apertures(self) -> tuple["Aperture"]:
         return (self,)
 
@@ -75,6 +79,12 @@ class Passage:  # PassageConstraint ? or some other better name
     left: float
     right: float
     radius: float
+
+    def __post_init__(self):
+        if self.right <= self.left:
+            raise ValueError("Left boundary must be less than right boundary")
+        if self.radius <= 0:
+            raise ValueError("Passage radius must be positive")
 
     @classmethod
     def centered(cls, center: float, width: float, radius: float) -> "Passage":
@@ -91,24 +101,6 @@ def mode_overlap(delta_z: float, waist_a: float, waist_b: float, wavelength: flo
     )
 
 
-# TODO should this be part of some class?
-# TODO verify no overlap between regions, maybe also verify regions sizes can fit lenses?
-def verify_regions(regions: list[Region], min_elements: int, max_elements: int):
-    if max_elements is not None and max_elements < min_elements:
-        raise ValueError("Global max_elements cannot be less than min_elements")
-
-    total_min = sum(region.min_elements for region in regions)
-    total_max = sum(region.max_elements for region in regions)
-
-    if total_max == float("inf") and max_elements == float("inf"):
-        raise ValueError("Cannot have unbounded maximum elements when global maximum is not set")
-
-    if total_min > max_elements:
-        raise ValueError("Sum of region minimum elements exceeds global maximum elements")
-    if total_max < min_elements:
-        raise ValueError("Sum of region maximum elements is less than global minimum elements")
-
-
 @dataclass(frozen=True)
 class ModeMatchingProblem:
     setup: OpticalSetup
@@ -120,6 +112,40 @@ class ModeMatchingProblem:
     constraints: list[Aperture | Passage]
     # TODO make it so that the order of evaluating the candidates does not change their random values
     rng: np.random.Generator
+
+    # TODO maybe also verify that there is a combination of lenses that can fit in the regions?
+    def __post_init__(self):
+        self._verify_selection()
+        self._verify_no_overlaps()
+        if self.setup.initial_beam.wavelength != self.desired_beam.wavelength:
+            # testing for equality of floats should be fine here since they should come from the same source
+            raise ValueError("Setup initial beam and desired beam must have the same wavelength")
+
+    def _verify_selection(self):
+        if self.max_elements is not None and self.max_elements < self.min_elements:
+            raise ValueError("Global max_elements cannot be less than min_elements")
+
+        total_min = sum(region.min_elements for region in self.regions)
+        total_max = sum(region.max_elements for region in self.regions)
+
+        if total_max == float("inf") and self.max_elements == float("inf"):
+            raise ValueError("Cannot have unbounded maximum elements when global maximum is not set")
+
+        if total_min > self.max_elements:
+            raise ValueError("Sum of region minimum elements exceeds global maximum elements")
+        if total_max < self.min_elements:
+            raise ValueError("Sum of region maximum elements is less than global minimum elements")
+
+    def _verify_no_overlaps(self):
+        regions: list[tuple[float, float, Any]] = []  # left right
+        regions.extend((pos, pos, element) for pos, element in self.setup.elements)
+        regions.extend((region.left, region.right, region) for region in self.regions)
+        regions.extend((ap.position, ap.position, ap) for ap in self.aperture_constraints if isinstance(ap, Aperture))
+        regions.extend((pas.left, pas.right, pas) for pas in self.constraints if isinstance(pas, Passage))
+        regions.sort(key=lambda x: x[0])
+        for r1, r2 in pairwise(regions):
+            if r1[1] > r2[0]:
+                raise ValueError(f"Overlapping regions/elements detected: {r1[2]} and {r2[2]}")
 
     @cached_property
     def aperture_constraints(self) -> list[Aperture]:
@@ -464,10 +490,6 @@ def mode_match(
     # verify and prepare inputs
     if isinstance(setup, Beam):
         setup = OpticalSetup(setup, [])
-    verify_regions(regions, min_elements, max_elements)
-
-    if setup.initial_beam.wavelength != desired_beam.wavelength:
-        raise ValueError("Setup initial beam and desired beam must have the same wavelength")
 
     if isinstance(filter_pred, float):
         min_overlap = filter_pred
