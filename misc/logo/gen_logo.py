@@ -16,16 +16,17 @@ colors = [
 ]
 
 
-def make_logo(filename, dark):
+def make_logo(filename, dark, crop=None):
     # setup plot
-    fig, ax = plt.subplots(figsize=(8, 4.5), tight_layout=True)
+    figsize = (8, 4.5) if not crop else (crop[0][1] - crop[0][0], crop[1][1] - crop[1][0])
+    fig, ax = plt.subplots(figsize=figsize, tight_layout=True)
     ax.set_aspect("equal")
     ax.set_xlim(-8, 8)
     ax.set_ylim(-4.5, 4.5)
     ax.axis("off")
     fig.set_facecolor("none")
 
-    beam = Beam.from_gauss(1, 0, 1)
+    beam = Beam.from_gauss(focus=0, waist=1, wavelength=1)
     radius_scale = 1.6
 
     # make the beam
@@ -56,6 +57,10 @@ def make_logo(filename, dark):
         ax.plot([pos - width / 2, pos + width / 2], [-width / 2, width / 2], **kwargs)
         ax.plot([pos - width / 2, pos + width / 2], [width / 2, -width / 2], **kwargs)
 
+    if crop is not None:
+        ax.set_xlim(*crop[0])
+        ax.set_ylim(*crop[1])
+
     fig.savefig(filename, transparent=True)
 
 
@@ -64,3 +69,5 @@ if __name__ == "__main__":
     directory = Path(__file__).parent.resolve()
     make_logo(directory / "logo_light.svg", dark=False)
     make_logo(directory / "logo_dark.svg", dark=True)
+    # only show the right expanding part for favicon
+    make_logo(directory / "favicon.svg", dark=False, crop=([0, 8], [-4, 4]))

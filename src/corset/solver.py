@@ -41,7 +41,7 @@ class ParametrizedSetup:
     initial_beam: Beam
     elements: list[tuple[float | None, Lens]]  # position, element
 
-    def substitute(self, positions: list[float] | np.ndarray) -> OpticalSetup:
+    def substitute(self, positions: list[float] | np.ndarray, validate: bool = True) -> OpticalSetup:
         substituted_elements = []
         pos_index = 0
         try:
@@ -54,7 +54,7 @@ class ParametrizedSetup:
             raise ValueError("Not enough positions provided to substitute all parametrized elements") from e
         if pos_index < len(positions):
             raise ValueError("Too many positions provided for the number of parametrized elements")
-        return OpticalSetup(self.initial_beam, substituted_elements)
+        return OpticalSetup(self.initial_beam, substituted_elements, validate)
 
     @cached_property
     def free_elements(self) -> list[int]:
@@ -251,9 +251,9 @@ class ModeMatchingCandidate:
 
     @cached_property
     def beam_constraint(self) -> optimize.NonlinearConstraint:
-        positions, radii = np.transpose([(c.position, c.radius) for c in self.problem.aperture_constraints])
+        zs, rs = np.transpose([(c.position, c.radius) for c in self.problem.aperture_constraints])
         return optimize.NonlinearConstraint(
-            lambda x, pos=positions, setup=self.parametrized_setup: setup.substitute(x).radius(pos) / radii, 0, 1
+            lambda x, zs=zs, rs=rs, s=self.parametrized_setup: s.substitute(x, validate=False).radius(zs) / rs, 0, 1
         )
 
     @cached_property
@@ -274,8 +274,10 @@ class ModeMatchingCandidate:
 
         # TODO unify this with the make_mode_overlap function in analyze.py?
         def objective(positions: np.ndarray) -> float:
-            setup = self.parametrized_setup.substitute(positions)  # pyright: ignore[reportArgumentType]
-            final_beam = setup.beams[-1]
+            setup = self.parametrized_setup.substitute(positions, validate=False)  # pyright: ignore[reportArgumentType]
+            # final_beam = setup.beams[-1]
+            initial_beam = self.problem.setup.initial_beam
+            final_beam = Beam(setup.rays[-1], z_offset=setup.elements[-1][0], wavelength=initial_beam.wavelength)
             desired_beam = self.problem.desired_beam
             return -mode_overlap(
                 final_beam.focus - desired_beam.focus,

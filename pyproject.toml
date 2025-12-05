@@ -20,9 +20,11 @@ corset = { path = ".", editable = true }
 
 [dependency-groups]
 dev = ["ipykernel"]
+doc = ["sphinx>=9.0.2,<10", "sphinx-book-theme>=1.1.4,<2", "numpydoc>=1.10.0,<2", "sphinx-autodoc-typehints>=3.5.2,<4"]
 
 [tool.pixi.environments]
 dev = ["dev"]
+doc = ["doc", "dev"]
 
 [tool.pytest.ini_options]
 # Ensure pytest looks for tests in the tests/ directory and uses the normal test_*.py pattern

@@ -4,3 +4,6 @@
 
 # Python cache files
 __pycache__/
+
+# Docs build files
+docs/build/
