@@ -1,3 +1,5 @@
+"""Plotting functions for optical setups and mode matching solutions and analyses."""
+
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
@@ -5,7 +7,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.collections import FillBetweenPolyCollection, LineCollection
 from matplotlib.colorbar import Colorbar
@@ -22,19 +23,21 @@ if TYPE_CHECKING:
     from .core import OpticalSetup
     from .solver import ModeMatchingSolution
 
-RELATIVE_MARGIN = 0.1
+RELATIVE_MARGIN = 0.1  #: Relative margin size for plotting optical setups
 
-milli_formatter = FuncFormatter(lambda x, _: f"{x*1e3:.0f}")
-micro_formatter = FuncFormatter(lambda x, _: f"{x*1e6:.0f}")
-
-
-def dilute_color(color: str, alpha: float) -> str:
-    mixed = np.array(colors.to_rgb(color)) * alpha + np.array([1, 1, 1]) * (1 - alpha)
-    return colors.to_hex(mixed)  # pyright: ignore[reportArgumentType]
+milli_formatter = FuncFormatter(lambda x, _: f"{x*1e3:.0f}")  #: Formatter for millimeter axes
+micro_formatter = FuncFormatter(lambda x, _: f"{x*1e6:.0f}")  #: Formatter for micrometer axes
 
 
-# convert a figure to png and consume io close it
 def fig_to_png(fig: Figure) -> bytes:
+    """Convert a Matplotlib figure to a PNG as bytes.
+
+    Args:
+        fig: The figure to convert.
+
+    Returns:
+        The PNG representation of the figure as bytes.
+    """
     buf = BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight")
     plt.close(fig)
@@ -43,39 +46,56 @@ def fig_to_png(fig: Figure) -> bytes:
 
 @dataclass(frozen=True)
 class OpticalSetupPlot:
-    ax: Axes
-    z: np.ndarray
-    w: np.ndarray
-    beam: FillBetweenPolyCollection
-    lenses: list[tuple[LineCollection, Annotation]]
+    """Plot of an optical setup with references to the plot elements."""
+
+    ax: Axes  #: Axes containing the plot
+    zs: np.ndarray  #: Z-coordinates of the beam profile
+    rs: np.ndarray  #: Radii of the beam profile
+    beam: FillBetweenPolyCollection  #: Fill between collection for the beam
+    lenses: list[tuple[LineCollection, Annotation]]  #: List of lens plot elements
 
     @cached_property
-    def w_max(self) -> float:
-        return np.max(self.w)
-
-    # TODO put back into plot optical setup function?
+    def r_max(self) -> float:
+        """Maximum beam radius in the plot."""
+        return np.max(self.rs)
 
 
 @dataclass(frozen=True)
 class ModeMatchingPlot:
-    ax: Axes
-    setup: OpticalSetupPlot
-    desired_beam: OpticalSetupPlot
-    regions: list[Rectangle]
-    apertures: list[Line2D]
-    passages: list[Rectangle]
+    """Plot of a mode matching solution with references to the plot elements."""
+
+    ax: Axes  #: Axes containing the plot
+    setup: OpticalSetupPlot  #: Plot of the actual optical setup
+    desired_beam: OpticalSetupPlot  #: Plot of the desired beam profile
+    regions: list[Rectangle]  #: List of regions in the plot
+    apertures: list[Line2D]  #: List of aperture lines in the plot
+    passages: list[Rectangle]  #: List of passage rectangles in the plot
 
 
 def plot_optical_setup(
     self: "OpticalSetup",
     *,
     ax: Axes | None = None,
-    points: None | int | np.ndarray = None,
+    points: int | np.ndarray | None = None,
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict = {"color": "C0", "alpha": 0.5},  # noqa: B006
     free_lenses: list[int] = [],  # noqa: B006
     # TODO add back other configuration options?
 ) -> OpticalSetupPlot:
+    """Plot the the beam profile and optical elements of the setup.
+
+    Args:
+        self: The optical setup instance.
+        ax: The axes to plot on. If `None`, the current axes are used.
+        points: Number of points or specific z-coordinates to evaluate the beam profile. If `None`, 500 points are used.
+        limits: Z-coordinate limits for the plot. If `None`, limits are determined from the beam and elements.
+        beam_kwargs: Additional keyword arguments passed to the beam plot.
+        free_lenses: Indices of lenses to treat as free elements in the plot.
+
+    Returns:
+        An :class:`OpticalSetupPlot` containing references to the plot elements.
+    """
+
     ax = ax or plt.gca()
 
     lens_positions = [pos for pos, _ in self.elements]
@@ -158,10 +178,18 @@ def plot_optical_setup(
     ax.set_ylabel(r"w(z) in $\mathrm{\mu m}$")
     ax.yaxis.set_major_formatter(micro_formatter)
 
-    return OpticalSetupPlot(ax=ax, z=zs, w=rs, beam=fb_col, lenses=lenses)  # pyright: ignore[reportArgumentType]
+    return OpticalSetupPlot(ax=ax, zs=zs, rs=rs, beam=fb_col, lenses=lenses)  # pyright: ignore[reportArgumentType]
 
 
-def plot_mode_match_solution_setup(self: "ModeMatchingSolution", ax: Axes | None = None) -> ModeMatchingPlot:
+def plot_mode_match_solution_setup(self: "ModeMatchingSolution", *, ax: Axes | None = None) -> ModeMatchingPlot:
+    """Plot the mode matching solution setup including the desired beam and constraints.
+
+    Args:
+        self: The mode matching solution instance.
+        ax: The axes to plot on. If `None`, the current axes are used.
+    Returns:
+        An :class:`ModeMatchingPlot` containing references to the plot elements.
+    """
     from .core import OpticalSetup
     from .solver import Aperture, Passage
 
@@ -176,9 +204,9 @@ def plot_mode_match_solution_setup(self: "ModeMatchingSolution", ax: Axes | None
     for region in problem.regions:
         # TODO color configuratbility?
         rectangle = Rectangle(
-            (region.left, -setup_plot.w_max * (1 + 2 * RELATIVE_MARGIN)),
+            (region.left, -setup_plot.r_max * (1 + 2 * RELATIVE_MARGIN)),
             region.right - region.left,
-            2 * setup_plot.w_max * (1 + 2 * RELATIVE_MARGIN),
+            2 * setup_plot.r_max * (1 + 2 * RELATIVE_MARGIN),
             fc="none",
             ec="lightgrey",
             ls="--",
@@ -217,22 +245,27 @@ def plot_mode_match_solution_setup(self: "ModeMatchingSolution", ax: Axes | None
 
 @dataclass(frozen=True)
 class ReachabilityPlot:
-    ax: Axes
-    lines: list[list[Line2D]]
-    contour: Any
-    colorbar: Colorbar | None
+    """Plot of a reachability analysis with references to the plot elements."""
+
+    ax: Axes  #: Axes containing the plot
+    lines: list[list[Line2D]]  #: Lines representing parameter variations
+    contour: Any  #: Contour plot of the mode overlap
+    colorbar: Colorbar | None  #: Colorbar for the contour plot
 
 
 @dataclass(frozen=True)
 class SensitivityPlot:
-    ax: Axes
-    contours: list[Any]
-    colorbar: Colorbar | None
-    handles: list
+    """Plot of a sensitivity analysis with references to the plot elements."""
+
+    ax: Axes  #: Axes containing the plot
+    contours: list[Any]  #: Contour plots of the sensitivity
+    colorbar: Colorbar | None  #: Colorbar for the contour plots
+    handles: list  #: Handles for the plot elements
 
 
 def plot_reachability(
     self: ModeMatchingSolution,
+    *,
     displacement: float | list[float] = 5e-3,
     num_samples: int | list[int] = 7,
     grid_step: int | list[int] = 2,
@@ -241,7 +274,22 @@ def plot_reachability(
     waist_range: tuple[float, float] | None = None,
     ax: Axes | None = None,
 ) -> ReachabilityPlot:
-    # TODO add reachability analysis plot class
+    """Plot a reachability analysis of the mode matching solution.
+
+    Args:
+        self: The mode matching solution instance.
+        displacement: Maximum displacement from the optimal position(s) in meters.
+        num_samples: Number of samples to take along each dimension.
+        grid_step: Step size to skip certain lines for increased smoothness while retaining clarity.
+        dimensions: Indices of the dimensions to analyze. If `None`, all dimensions are used.
+        focus_range: Range of focus values to display on the x-axis. If `None`, determined automatically.
+        waist_range: Range of waist values to display on the y-axis. If `None`, determined automatically.
+        ax: The axes to plot on. If `None`, the current axes are used.
+
+    Returns:
+        A :class:`ReachabilityPlot` containing references to the plot elements.
+    """
+
     from .analysis import make_focus_and_waist, vector_partial
     from .solver import mode_overlap
 
@@ -328,6 +376,7 @@ def plot_reachability(
 
 def plot_sensitivity(
     self: "ModeMatchingSolution",
+    *,
     dimensions: tuple[int, int] | tuple[int, int, int] | None = None,
     worst_overlap: float = 0.98,
     x_range: tuple[float, float] | None = None,
@@ -337,6 +386,25 @@ def plot_sensitivity(
     force_contours: bool = False,
     ax: Axes | None = None,
 ) -> SensitivityPlot:
+    """Plot a sensitivity analysis of the mode matching solution.
+
+    Args:
+        self: The mode matching solution instance.
+        dimensions: Indices of the dimensions to analyze. If `None`, the two least
+            coupled dimensions are used as the x and y dimensions, and the remaining most sensitive
+            dimension is used as the auxiliary z dimension if applicable.
+        worst_overlap: Worst-case mode overlap contour line that should still be fully visible in the plot.
+        x_range: Range of x-axis values to display. If `None`, determined automatically from worst_overlap.
+        y_range: Range of y-axis values to display. If `None`, determined automatically from worst_overlap.
+        z_range: Range of z-axis values to display. If `None`, determined automatically from worst_overlap.
+        z_n: Number of z-slices to plot if 3 dimensions are used.
+        force_contours: If `True`, always use contour lines instead of filled contours for plots with two degrees of freedom.
+        ax: The axes to plot on. If `None`, the current axes are used.
+
+    Returns:
+        A :class:`SensitivityPlot` containing references to the plot elements.
+    """
+
     from .analysis import make_mode_overlap, vector_partial
 
     ax = ax or plt.gca()
@@ -427,10 +495,23 @@ def plot_sensitivity(
 
 def plot_mode_match_solution_all(
     self: "ModeMatchingSolution",
+    *,
     plot_kwargs: dict = {},  # noqa: B006
     reachability_kwargs: dict = {},  # noqa: B006
     sensitivity_kwargs: dict = {},  # noqa: B006
 ) -> tuple[Figure, tuple[ModeMatchingPlot, ReachabilityPlot, SensitivityPlot]]:
+    """Plot the mode matching solution setup, reachability analysis, and sensitivity analysis in a single figure.
+
+    Args:
+        self: The mode matching solution instance.
+        plot_kwargs: Additional keyword arguments for the mode matching plot.
+        reachability_kwargs: Additional keyword arguments for the reachability plot.
+        sensitivity_kwargs: Additional keyword arguments for the sensitivity plot.
+
+    Returns:
+        A tuple containing the figure and an inner tuple with the three plot objects.
+    """
+
     fig, (axl, axr, axc) = plt.subplots(1, 3, figsize=(16, 4), gridspec_kw={"width_ratios": [2, 1, 1]})
     sol_plot = self.plot_setup(ax=axl, **plot_kwargs)
     reach_plot = self.plot_reachability(ax=axr, **reachability_kwargs)

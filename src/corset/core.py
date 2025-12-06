@@ -188,7 +188,7 @@ class OpticalSetup:
         index = np.searchsorted([pos for pos, _ in self.elements], z)
         return self.beams[index].radius(z)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
-    plot = plot_optical_setup  #: Plot the optical setup, see :func:`plot_optical_setup`
+    plot = plot_optical_setup  #: Plot the optical setup, see :func:`corset.plot.plot_optical_setup`
 
     # TODO cache this (and the other repr png functions)?
     def _repr_png_(self) -> bytes:

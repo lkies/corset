@@ -488,10 +488,10 @@ class ModeMatchingSolution:
         """Optical setup corresponding to this solution."""
         return self.candidate.parametrized_setup.substitute(self.positions)  # pyright: ignore[reportArgumentType]
 
-    plot_setup = plot_mode_match_solution_setup
-    plot_reachability = plot_reachability
-    plot_sensitivity = plot_sensitivity
-    plot_all = plot_mode_match_solution_all
+    plot_setup = plot_mode_match_solution_setup  #: Plot the solution setup, see :func:`corset.plot.plot_mode_match_solution_setup`
+    plot_reachability = plot_reachability  #: Plot the reachability analysis, see :func:`corset.plot.plot_reachability`
+    plot_sensitivity = plot_sensitivity  #: Plot the sensitivity analysis, see :func:`corset.plot.plot_sensitivity`
+    plot_all = plot_mode_match_solution_all  #: Plot all analyses, see :func:`corset.plot.plot_mode_match_solution_all`
 
     def _repr_png_(self) -> bytes:
         fig, _ = self.plot_all()
