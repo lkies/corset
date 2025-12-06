@@ -24,7 +24,8 @@ from .plot import OpticalSetupPlot, fig_to_png, plot_optical_setup
 class Beam:
     """Paraxial Gaussian beam representation.
 
-    Supports _repr_png_ for IPython environments."""
+    Implements :meth:`_repr_png_` to show a plot of the beam radius in IPython environments.
+    """
 
     beam_parameter: complex
     """Complex beam parameter :math:`q = z - z_0 + i z_R` defined at position :math:`z`
@@ -146,7 +147,8 @@ class Lens:
 class OpticalSetup:
     """Optical setup described by an initial beam and a sequence of elements.
 
-    Supports _repr_png_ for IPython environments."""
+    Implements :meth:`_repr_png_` to show a plot of the optical setup in IPython environments.
+    """
 
     initial_beam: Beam  #: Initial beam before left most element
     elements: list[tuple[float, Lens]]  #: Optical elements as (position, element) tuples sorted by position

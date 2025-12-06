@@ -6,8 +6,8 @@ The problem defined with the help of :class:`Region`, :class:`Aperture`, and :cl
 The constructed :class:`ModeMatchingProblem` yields :class:`ModeMatchingCandidate` instances
 that are then optimized to produce :class:`ModeMatchingSolution` instances.
 Each step containing a reference to the data structure it is based on.
+The actual constrained optimization is carried out using :func:`scipy.optimize.minimize` using the SLSQP method.
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
-
 """
 
 from collections.abc import Callable, Generator
@@ -474,7 +474,10 @@ class ModeMatchingCandidate:
 
 @dataclass(frozen=True)
 class ModeMatchingSolution:
-    """A solution to a mode matching problem."""
+    """A solution to a mode matching problem.
+
+    Implements :meth:`_repr_png_` to show a plot of the solution setup in IPython environments.
+    """
 
     candidate: ModeMatchingCandidate  #: The candidate that produced this solution
     overlap: float  #: Mode overlap of the solution
@@ -562,7 +565,7 @@ class SolutionList:
     """List of mode matching solutions with convenient methods for filtering and sorting.
 
     Supports (array) indexing, iteration, and other list-like operations.
-    It will show a pandas DataFrame representation provided by _repr_html_ in IPython environments.
+    Implements :meth:`_repr_html_` to show a :class:`pandas.DataFrame` representation in IPython environments.
     """
 
     solutions: list[ModeMatchingSolution]  #: List of mode matching solutions
@@ -587,17 +590,17 @@ class SolutionList:
 
     @cached_property
     def df(self) -> pd.DataFrame:
-        """Pandas DataFrame representation of the solutions for easy analysis."""
+        """DataFrame representation of the solutions for easy analysis."""
         return pd.DataFrame([sol.analysis.summary() for sol in self.solutions])
 
     def _repr_html_(self) -> str:
         return self.df.to_html(notebook=True)
 
     def query(self, expr: str) -> "SolutionList":
-        """Filter solutions based on a pandas query expression applied to the DataFrame representation.
+        """Filter solutions based on a :meth:`pandas.DataFrame.query` expression applied to the DataFrame representation.
 
         Args:
-            expr: Pandas query expression as a string.
+            expr: Query string, see :meth:`pandas.DataFrame.query` for details.
 
         Returns:
             A new :class:`SolutionList` containing only the solutions that satisfy the query.
