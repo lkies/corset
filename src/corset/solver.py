@@ -182,6 +182,9 @@ class ModeMatchingProblem:
             raise ValueError("Setup initial beam and desired beam must have the same wavelength")
 
     def _verify_selection(self):
+        if self.min_elements < 1:
+            raise ValueError("Global min_elements must be at least 1")
+
         if self.max_elements is not None and self.max_elements < self.min_elements:
             raise ValueError("Global max_elements cannot be less than min_elements")
 
@@ -626,7 +629,7 @@ def mode_match(
     desired_beam: Beam,
     regions: list[Region],
     selection: list[Lens] = [],  # noqa: B006
-    min_elements: int = 0,
+    min_elements: int = 1,
     max_elements: int = float("inf"),  # pyright: ignore[reportArgumentType]
     constraints: list[Aperture | Passage] = [],  # noqa: B006
     filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = None,

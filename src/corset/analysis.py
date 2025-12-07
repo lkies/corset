@@ -74,7 +74,7 @@ def make_mode_overlap(solution: "ModeMatchingSolution") -> Callable[[np.ndarray]
     from . import solver
 
     def overlap(positions: np.ndarray) -> float:
-        setup = solution.candidate.parametrized_setup.substitute(positions)
+        setup = solution.candidate.parametrized_setup.substitute(positions, validate=False)
         final_beam = setup.beams[-1]
         problem = solution.candidate.problem
         return solver.mode_overlap(
@@ -98,7 +98,7 @@ def make_focus_and_waist(solution: "ModeMatchingSolution") -> Callable[[np.ndarr
     """
 
     def focus_and_waist(positions: np.ndarray) -> np.ndarray:
-        setup = solution.candidate.parametrized_setup.substitute(positions)
+        setup = solution.candidate.parametrized_setup.substitute(positions, validate=False)
         final_beam = setup.beams[-1]
         return np.array([final_beam.focus, final_beam.waist])
 
@@ -277,6 +277,7 @@ class ModeMatchingAnalysis:
             - "overlap": The mode overlap of the solution.
             - "num_elements": The number of free elements (i.e. elements used for mode matching) in the setup.
             - "elements": A list of the free elements (i.e. elements used for mode matching) in the setup.
+            - "positions": The positions of the free elements in the setup.
             - "min_sensitivity_axis": The index of the degree of freedom with minimal sensitivity.
             - "min_sensitivity": The minimal sensitivity in the specified unit.
             - "max_sensitivity_axis": The index of the degree of freedom with maximal sensitivity.
@@ -301,7 +302,8 @@ class ModeMatchingAnalysis:
         return {
             "overlap": sol.overlap,
             "num_elements": len(sol.positions),
-            "elements": [sol.setup.elements[i] for i in sol.candidate.parametrized_setup.free_elements],
+            "elements": [sol.setup.elements[i][1] for i in sol.candidate.parametrized_setup.free_elements],
+            "positions": sol.positions,
             "min_sensitivity_axis": self.min_sensitivity_axis,
             "min_sensitivity": self.min_sensitivity * factor,
             "max_sensitivity_axis": self.max_sensitivity_axis,

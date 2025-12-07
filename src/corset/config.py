@@ -33,6 +33,13 @@ class Config:
     """Levels for overlap contours in plots"""
     overlap_colormap: str = "turbo"  #: Colormap for overlap contours in plots
     overwrite_dark_theme: bool | None = None  #: Override automatic detection of dark theme in plots
+    plot_max_rayleigh_range: float = 200e-3
+    """During plotting, the interval of interest is automatically determined
+    based on the Rayleigh range of the beam, for large Rayleigh ranges this can
+    significantly inflate the plotted region, making the important features hard to see.
+    This parameter limits this effect by capping the maximum Rayleigh range considered when
+    determining the plotted interval.
+    """
 
     # TODO specify defaults for plotting functions here instead of in the function signatures?
 

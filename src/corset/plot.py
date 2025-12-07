@@ -104,15 +104,16 @@ def plot_optical_setup(
         zs = points
     else:
         if not limits:
+            cap = Config.plot_max_rayleigh_range
             all_bounds = [
-                self.beams[0].focus - self.beams[0].rayleigh_range,
-                self.beams[-1].focus + self.beams[-1].rayleigh_range,
+                self.beams[0].focus - min(cap, self.beams[0].rayleigh_range),
+                self.beams[-1].focus + min(cap, self.beams[-1].rayleigh_range),
                 *(),
                 *lens_positions,
             ]
             if self.elements:
-                all_bounds.append(self.elements[0][0] - self.beams[0].rayleigh_range)
-                all_bounds.append(self.elements[-1][0] + self.beams[-1].rayleigh_range)
+                all_bounds.append(self.elements[0][0] - min(cap, self.beams[0].rayleigh_range))
+                all_bounds.append(self.elements[-1][0] + min(cap, self.beams[-1].rayleigh_range))
 
             limits = (min(all_bounds), max(all_bounds))
 
@@ -152,7 +153,7 @@ def plot_optical_setup(
         # TODO label and enumerate free lenses?
         label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length*1e3)}mm"
         if i in free_lenses:
-            label_text = f"$L_{i}$: " + label_text
+            label_text = f"$L_{i}$: {label_text} @{round(pos*1e3)}mm"
         label = ax.text(
             pos,
             -w_max * (1 + RELATIVE_MARGIN),
@@ -161,7 +162,7 @@ def plot_optical_setup(
             ha="left",
             rotation="vertical",
             rotation_mode="anchor",
-            bbox={"fc": plt.rcParams["axes.facecolor"], "ec": "none", "alpha": 0.7},
+            bbox={"fc": plt.rcParams["axes.facecolor"], "ec": "none", "alpha": 0.5},
             zorder=zorder,
         )
 
@@ -512,7 +513,9 @@ def plot_mode_match_solution_all(
         A tuple containing the figure and an inner tuple with the three plot objects.
     """
 
-    fig, (axl, axr, axc) = plt.subplots(1, 3, figsize=(16, 4), gridspec_kw={"width_ratios": [2, 1, 1]})
+    fig, (axl, axr, axc) = plt.subplots(
+        1, 3, figsize=(16, 4), gridspec_kw={"width_ratios": [2, 1, 1]}, tight_layout=True
+    )
     sol_plot = self.plot_setup(ax=axl, **plot_kwargs)
     reach_plot = self.plot_reachability(ax=axr, **reachability_kwargs)
     sens_plot = self.plot_sensitivity(ax=axc, **sensitivity_kwargs)

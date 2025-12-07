@@ -26,6 +26,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_autodoc_typehints",
     "sphinx.ext.intersphinx",
+    "nbsphinx",
 ]
 
 intersphinx_mapping = {
@@ -33,6 +34,7 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
+    "IPython": ("https://ipython.readthedocs.io/en/stable/", None),
 }
 
 templates_path = ["_templates"]
@@ -42,6 +44,8 @@ autodoc_member_order = "groupwise"
 autodoc_typehints = "both"
 typehints_use_signature_return = True
 typehints_defaults = "comma"
+
+nbsphinx_execute = "always"
 
 
 # -- Options for HTML output -------------------------------------------------
