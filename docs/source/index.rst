@@ -11,7 +11,7 @@ Beam Corset Documentation
    :caption: User Guide
 
    intro
-   basic_usage.ipynb
+   gen/basic_usage.ipynb
 
 
 .. toctree::

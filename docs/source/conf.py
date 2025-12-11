@@ -64,3 +64,33 @@ html_theme_options = {
 }
 
 html_favicon = "../../misc/logo/favicon.svg"
+
+
+### Preprocess notebooks for RST compatibility
+# TODO move this to a separate script and check timestamps to only preprocess when necessary
+import json
+from pathlib import Path
+
+
+def process_notebook(source: Path, output: Path):
+    notebook = json.loads(source.read_text(encoding="utf-8"))
+
+    for cell in notebook.get("cells", []):
+        metadata = cell.get("metadata", {})
+        if cell.get("cell_type") == "markdown" and "rst" in metadata.get("tags", []):
+            cell["cell_type"] = "raw"
+            cell["metadata"] = metadata | {"raw_mimetype": "text/restructuredtext"}
+            cell["source"] = [line.replace("\\", "\\\\") for line in cell["source"]]
+
+    output.write_text(json.dumps(notebook, indent=1), encoding="utf-8")
+
+
+def preprocess_notebooks(source_dir: Path, output_dir: Path):
+    for source in source_dir.glob("*.ipynb"):
+        output = output_dir / source.name
+        process_notebook(source, output)
+
+
+this_file_dir = Path(__file__).parent
+
+preprocess_notebooks(this_file_dir / "../notebooks", this_file_dir / "gen")

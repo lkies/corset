@@ -7,6 +7,7 @@ __pycache__/
 
 # Docs build files
 docs/build/
+docs/source/gen/
 
 # Distribution files
 dist/
