@@ -1,0 +1,31 @@
+name: Build and deploy docs to GitHub Pages
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build Sphinx docs in Pixi environment
+        uses: prefix-dev/setup-pixi@v0.9.3
+        with:
+          pixi-version: v0.59.0
+
+      - run: pixi run -e doc make -C docs html
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./docs/build/html
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
