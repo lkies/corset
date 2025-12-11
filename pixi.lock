@@ -384,7 +384,7 @@ packages:
 - pypi: ./
   name: corset
   version: 0.1.0
-  sha256: ebc0a5790629e9ee7555d4fcf3958c52a73e088cf03640c20df38be90fcca2cd
+  sha256: 362978677f7a7282d495a03cab25cf171d903c26984ff86543a7b9a3c07f2352
   requires_dist:
   - numpy>=2.3.4,<3
   - scipy>=1.16.3,<2

@@ -213,6 +213,16 @@ class ModeMatchingAnalysis:
         return abs(float(self.sensitivities[self.min_cross_sens_pair]))
 
     @cached_property
+    def min_cross_sens_direction(self) -> np.ndarray:
+        """The direction of the least cross-sensitive pair of degrees of freedom.
+        This is the smallest eigenvector of the 2x2 cross-sensitivity sub-matrix of the least cross-sensitive pair.
+        """
+        pair = self.min_cross_sens_pair
+        eigs = np.linalg.eigh(self.sensitivities[np.ix_(pair, pair)])
+        vec = eigs.eigenvectors[:, np.argmin(eigs.eigenvalues)]
+        return vec if vec[0] >= 0 else -vec
+
+    @cached_property
     def min_sensitivity_axis(self) -> int:
         """The index :math:`i` of the degree of freedom with minimal absolute sensitivity :math:`s_{ii}`."""
 
@@ -284,6 +294,7 @@ class ModeMatchingAnalysis:
             - "max_sensitivity": The maximal sensitivity in the specified unit.
             - "min_cross_sens_pair": The indices of the pair of degrees of freedom with minimal cross-sensitivity.
             - "min_cross_sens": The minimal cross-sensitivity in the specified unit.
+            - "min_cross_sens_direction": The direction of the least cross-sensitive pair of degrees of freedom.
             - "min_coupling_pair": The indices of the pair of degrees of freedom with minimal coupling.
             - "min_coupling": The minimal coupling.
             - "sensitivities": The sensitivity matrix in the specified unit.
@@ -310,6 +321,7 @@ class ModeMatchingAnalysis:
             "max_sensitivity": self.max_sensitivity * factor,
             "min_cross_sens_pair": self.min_cross_sens_pair,
             "min_cross_sens": self.min_cross_sens * factor,
+            "min_cross_sens_direction": self.min_cross_sens_direction,
             "min_coupling_pair": self.min_coupling_pair,
             "min_coupling": self.min_coupling,
             "sensitivities": self.sensitivities * factor,
