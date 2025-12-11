@@ -4,6 +4,18 @@ dependencies = ["numpy>=2.3.4,<3", "scipy>=1.16.3,<2", "pandas>=2.3.3,<3", "matp
 name = "corset"
 requires-python = ">= 3.11"
 version = "0.1.0"
+description = "Beam Corset is a Gaussian optics mode matching tool made for use in Jupyter notebooks."
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+]
+urls = {"Source" = "https://github.com/lkies/corset", "Documentation" = "https://lkies.github.io/corset"}
 
 [build-system]
 build-backend = "hatchling.build"
@@ -16,16 +28,14 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 [tool.pixi.pypi-dependencies]
 corset = { path = ".", editable = true }
 
-[tool.pixi.tasks]
-
 [dependency-groups]
-dev = ["ipykernel", "nbconvert>=7.16.6,<8"]
+dev = ["ipykernel", "nbconvert>=7.16.6,<8", "build>=1.3.0,<2", "twine>=6.2.0,<7"]
 doc = [
     "sphinx>=9.0.2,<10",
     "sphinx-book-theme>=1.1.4,<2",
     "numpydoc>=1.10.0,<2",
     "sphinx-autodoc-typehints>=3.5.2,<4",
-    "nbsphinx>=0.9.8,<0.10",
+    "nbsphinx>=0.9.8,<0.10", "sphinx-copybutton>=0.5.2,<0.6",
 ]
 
 [tool.pixi.environments]
@@ -33,7 +43,13 @@ dev = ["dev"]
 doc = ["doc", "dev"]
 
 [tool.pixi.feature.doc.dependencies]
-pandoc = ">=3.8.3,<4"
+pandoc = ">=3.8.3,<4" # this only installs properly as a conda dependency
+
+[tool.pixi.tasks]
+build = "pixi run -e dev python -m build -o dist"
+publish = "pixi run -e dev twine upload dist/*"
+build-docs = "pixi run -e doc sphinx-build -M html docs/source/ docs/build/"
+
 
 [tool.pytest.ini_options]
 # Ensure pytest looks for tests in the tests/ directory and uses the normal test_*.py pattern
