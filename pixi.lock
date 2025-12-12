@@ -1165,6 +1165,17 @@ packages:
   - pytz ; extra == 'dev'
   - setuptools ; extra == 'dev'
   requires_python: '>=3.8'
+- pypi: ./
+  name: beam-corset
+  version: 0.1.0
+  sha256: 0ab30a71845a076abf9eda99807fcb0de024766541377b6db146fdc9b282b4ed
+  requires_dist:
+  - numpy>=2.3.4,<3
+  - scipy>=1.16.3,<2
+  - pandas>=2.3.3,<3
+  - matplotlib>=3.10.7,<4
+  requires_python: '>=3.11'
+  editable: true
 - pypi: https://files.pythonhosted.org/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl
   name: beautifulsoup4
   version: 4.14.3
@@ -1401,17 +1412,6 @@ packages:
   - pytest-xdist ; extra == 'test-no-images'
   - wurlitzer ; extra == 'test-no-images'
   requires_python: '>=3.11'
-- pypi: ./
-  name: corset
-  version: 0.1.0
-  sha256: 9ca5964dae2621aa1f9973edd54de6fb42fb9d4c693acfda6b49a4e7a8304330
-  requires_dist:
-  - numpy>=2.3.4,<3
-  - scipy>=1.16.3,<2
-  - pandas>=2.3.3,<3
-  - matplotlib>=3.10.7,<4
-  requires_python: '>=3.11'
-  editable: true
 - pypi: https://files.pythonhosted.org/packages/c9/56/e7e69b427c3878352c2fb9b450bd0e19ed552753491d39d7d0a2f5226d41/cryptography-46.0.3-cp311-abi3-manylinux_2_28_x86_64.whl
   name: cryptography
   version: 46.0.3
