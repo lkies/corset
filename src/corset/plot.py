@@ -67,7 +67,7 @@ class ModeMatchingPlot:
     ax: Axes  #: Axes containing the plot
     setup: OpticalSetupPlot  #: Plot of the actual optical setup
     desired_beam: OpticalSetupPlot  #: Plot of the desired beam profile
-    regions: list[Rectangle]  #: List of regions in the plot
+    ranges: list[Rectangle]  #: List of ranges in the plot
     apertures: list[Line2D]  #: List of aperture lines in the plot
     passages: list[Rectangle]  #: List of passage rectangles in the plot
 
@@ -201,19 +201,19 @@ def plot_mode_match_solution_setup(self: "ModeMatchingSolution", *, ax: Axes | N
     setup_plot = plot_optical_setup(self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements)
     desired_plot = plot_optical_setup(OpticalSetup(problem.desired_beam, []), ax=ax, beam_kwargs={"color": "C1"})
 
-    regions = []
-    for region in problem.regions:
+    ranges = []
+    for range_ in problem.ranges:
         # TODO color configuratbility?
         rectangle = Rectangle(
-            (region.left, -setup_plot.r_max * (1 + 2 * RELATIVE_MARGIN)),
-            region.right - region.left,
+            (range_.left, -setup_plot.r_max * (1 + 2 * RELATIVE_MARGIN)),
+            range_.right - range_.left,
             2 * setup_plot.r_max * (1 + 2 * RELATIVE_MARGIN),
             fc="none",
             ec="lightgrey",
             ls="--",
             zorder=50,  # TODO
         )
-        regions.append(ax.add_patch(rectangle))
+        ranges.append(ax.add_patch(rectangle))
 
     apertures = []
     passages = []
@@ -238,7 +238,7 @@ def plot_mode_match_solution_setup(self: "ModeMatchingSolution", *, ax: Axes | N
         ax=ax,
         setup=setup_plot,
         desired_beam=desired_plot,
-        regions=regions,
+        ranges=ranges,
         apertures=apertures,
         passages=passages,
     )

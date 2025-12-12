@@ -2,7 +2,7 @@
 
 The main entry point is the function :func:`mode_match`, it will setup
 the :class:`ModeMatchingProblem`.
-The problem defined with the help of :class:`Region`, :class:`Aperture`, and :class:`Passage` instances.
+The problem defined with the help of :class:`ShiftingRange`, :class:`Aperture`, and :class:`Passage` instances.
 The constructed :class:`ModeMatchingProblem` yields :class:`ModeMatchingCandidate` instances
 that are then optimized to produce :class:`ModeMatchingSolution` instances.
 Each step containing a reference to the data structure it is based on.
@@ -32,20 +32,20 @@ from .plot import (
 
 
 @dataclass(frozen=True)
-class Region:
-    """Region where lenses can be placed."""
+class ShiftingRange:
+    """Range where lenses can be placed."""
 
-    left: float  #: Region left boundary
-    right: float  #: Region right boundary
-    min_elements: int = 0  #: Minimum number of lenses to be placed in this region
+    left: float  #: Range left boundary
+    right: float  #: Range right boundary
+    min_elements: int = 0  #: Minimum number of lenses to be placed in this range
     max_elements: int = float("inf")  # pyright: ignore[reportAssignmentType]
-    """Maximum number of lenses that can be placed in this region."""
+    """Maximum number of lenses that can be placed in this range."""
     selection: list[Lens] = field(default_factory=list)  # TODO name
-    """Optional set of lenses to use for this region, if empty the global selection is used."""
+    """Optional set of lenses to use for this range, if empty the global selection is used."""
 
     def __post_init__(self):
         if self.right <= self.left:
-            raise ValueError("Region right boundary must be greater than left boundary")
+            raise ValueError("Range right boundary must be greater than left boundary")
         if self.min_elements < 0:
             raise ValueError("min_elements cannot be negative")
         if self.max_elements < self.min_elements:
@@ -165,7 +165,7 @@ class ModeMatchingProblem:
 
     setup: OpticalSetup  #: Initial optical setup
     desired_beam: Beam  #: Desired output beam after the optical setup
-    regions: list[Region]  #: Regions where lenses can be placed
+    ranges: list[ShiftingRange]  #: Ranges where lenses can be placed
     selection: list[Lens]  #: Selection of lenses to choose from for mode matching
     min_elements: int  #: Minimum number of elements to use
     max_elements: int  #: Maximum number of elements to use
@@ -173,7 +173,7 @@ class ModeMatchingProblem:
     # TODO make it so that the order of evaluating the candidates does not change their random values
     rng: np.random.Generator  #: Seeded random number generator for reproducibility
 
-    # TODO maybe also verify that there is a combination of lenses that can fit in the regions?
+    # TODO maybe also verify that there is a combination of lenses that can fit in the ranges?
     def __post_init__(self):
         self._verify_selection()
         self._verify_no_overlaps()
@@ -188,21 +188,21 @@ class ModeMatchingProblem:
         if self.max_elements is not None and self.max_elements < self.min_elements:
             raise ValueError("Global max_elements cannot be less than min_elements")
 
-        total_min = sum(region.min_elements for region in self.regions)
-        total_max = sum(region.max_elements for region in self.regions)
+        total_min = sum(r.min_elements for r in self.ranges)
+        total_max = sum(r.max_elements for r in self.ranges)
 
         if total_max == float("inf") and self.max_elements == float("inf"):
             raise ValueError("Cannot have unbounded maximum elements when global maximum is not set")
 
         if total_min > self.max_elements:
-            raise ValueError("Sum of region minimum elements exceeds global maximum elements")
+            raise ValueError("Sum of range minimum elements exceeds global maximum elements")
         if total_max < self.min_elements:
-            raise ValueError("Sum of region maximum elements is less than global minimum elements")
+            raise ValueError("Sum of range maximum elements is less than global minimum elements")
 
     def _verify_no_overlaps(self):
         regions: list[tuple[float, float, Any]] = []  # left right
         regions.extend((pos, pos, element) for pos, element in self.setup.elements)
-        regions.extend((region.left, region.right, region) for region in self.regions)
+        regions.extend((range_.left, range_.right, range_) for range_ in self.ranges)
         regions.extend((ap.position, ap.position, ap) for ap in self.aperture_constraints if isinstance(ap, Aperture))
         regions.extend((pas.left, pas.right, pas) for pas in self.constraints if isinstance(pas, Passage))
         regions.sort(key=lambda x: x[0])
@@ -218,53 +218,53 @@ class ModeMatchingProblem:
 
     @cached_property
     def interleaved_elements(self) -> list[tuple[float, Lens] | int]:
-        """List of all (potential) elements, regions where elements can be placed are represented
+        """List of all (potential) elements, ranges where elements can be placed are represented
         by their index instead of the (position, element) tuple. Used for easy construction of parametrized setups."""
         merged: list[tuple[float, Lens] | int] = []
-        next_boundary = self.regions[0].left if self.regions else float("inf")
-        region_index = 0
+        next_boundary = self.ranges[0].left if self.ranges else float("inf")
+        range_index = 0
 
         for pos, element in self.setup.elements:
             while pos > next_boundary:
-                merged.append(region_index)
-                region_index += 1
-                next_boundary = self.regions[region_index].left if region_index < len(self.regions) else float("inf")
+                merged.append(range_index)
+                range_index += 1
+                next_boundary = self.ranges[range_index].left if range_index < len(self.ranges) else float("inf")
             merged.append((pos, element))
 
-        while region_index < len(self.regions):
-            merged.append(region_index)
-            region_index += 1
+        while range_index < len(self.ranges):
+            merged.append(range_index)
+            range_index += 1
 
         return merged
 
     @classmethod
     def lens_combinations(
         cls,
-        regions: list[Region],
+        ranges: list[ShiftingRange],
         base_selection: list[Lens],
         min_elements: int,
         max_elements: int,
         current_populations: list[tuple[Lens, ...]] = [],  # noqa: B006
     ) -> Generator[list[tuple[Lens, ...]], None, None]:
-        """Recursive helper function to generate all possible lens populations for the given regions.
+        """Recursive helper function to generate all possible lens populations for the given ranges.
 
         Args:
-            regions: Remaining regions to process.
+            ranges: Remaining ranges to process.
             base_selection: Global selection of lenses to choose from.
             min_elements: Minimum number of elements remaining to place.
             max_elements: Maximum number of elements remaining to place.
-            current_populations: Current lens populations for the processed regions.
+            current_populations: Current lens populations for the processed ranges.
 
         Yields:
-            list[tuple[Lens, ...]]: The next lens populations for all regions.
+            list[tuple[Lens, ...]]: The next lens populations for all ranges.
         """
 
-        if not regions:
+        if not ranges:
             if min_elements <= 0:
                 yield current_populations
             return
 
-        first, *rest = regions
+        first, *rest = ranges
 
         if first.min_elements > max_elements:
             return
@@ -278,12 +278,12 @@ class ModeMatchingProblem:
                 )
 
     def candidates(self) -> Generator["ModeMatchingCandidate", None, None]:
-        """Generate all possible region population candidates for the mode matching problem.
+        """Generate all possible range population candidates for the mode matching problem.
 
         Returns:
             Generator of :class:`ModeMatchingCandidate` instances.
         """
-        for population in self.lens_combinations(self.regions, self.selection, self.min_elements, self.max_elements):
+        for population in self.lens_combinations(self.ranges, self.selection, self.min_elements, self.max_elements):
             yield ModeMatchingCandidate(problem=self, populations=population)
 
 
@@ -292,7 +292,7 @@ class ModeMatchingCandidate:
     """A candidate lens population for a mode matching problem."""
 
     problem: ModeMatchingProblem  #: The parent mode matching problem
-    populations: list[tuple[Lens, ...]]  #: Lens populations for each region
+    populations: list[tuple[Lens, ...]]  #: Lens populations for each range
 
     # TODO seeding?
     def generate_initial_positions(self, random: bool) -> np.ndarray:
@@ -305,20 +305,20 @@ class ModeMatchingCandidate:
             Array of initial positions for the lenses.
         """
         positions = []
-        for region, population in zip(self.problem.regions, self.populations, strict=True):
+        for range_, population in zip(self.problem.ranges, self.populations, strict=True):
             if not population:
                 continue
             total_margin = sum(lens.left_margin + lens.right_margin for lens in population)
-            available_space = region.right - region.left - total_margin
+            available_space = range_.right - range_.left - total_margin
             if available_space < 0:
-                raise ValueError("Not enough space in region for the lenses with their margins")
+                raise ValueError("Not enough space in range for the lenses with their margins")
 
             if random:
                 distances = np.diff(np.sort(self.problem.rng.uniform(0, available_space, len(population))), prepend=0)
             else:
                 distances = np.repeat(available_space / (len(population) + 1), len(population))
 
-            current_pos = region.left
+            current_pos = range_.left
             for lens, distance in zip(population, distances, strict=True):
                 current_pos += lens.left_margin + distance
                 positions.append(current_pos)
@@ -340,22 +340,22 @@ class ModeMatchingCandidate:
 
     @cached_property
     def position_constraint(self) -> optimize.LinearConstraint:
-        """Linear constraint ensuring lenses do not overlap, stay within regions and do not swap order."""
+        """Linear constraint ensuring lenses do not overlap, stay within ranges and do not swap order."""
         constraints: list[tuple[np.ndarray, float, float]] = []
         pop_sizes = [len(pop) for pop in self.populations]
         index_offsets = np.cumsum([0, *pop_sizes[:-1]])
         mask = np.identity(sum(pop_sizes))
-        for region, population, base_idx in zip(self.problem.regions, self.populations, index_offsets, strict=True):
+        for range_, population, base_idx in zip(self.problem.ranges, self.populations, index_offsets, strict=True):
             if not population:
                 continue
             if len(population) == 1:
                 constraints.append(
-                    (mask[base_idx], region.left + population[0].left_margin, region.right - population[0].right_margin)
+                    (mask[base_idx], range_.left + population[0].left_margin, range_.right - population[0].right_margin)
                 )
             else:
                 right_index = base_idx + len(population) - 1
-                constraints.append((mask[base_idx], region.left + population[0].left_margin, np.inf))
-                constraints.append((mask[right_index], -np.inf, region.right - population[-1].right_margin))
+                constraints.append((mask[base_idx], range_.left + population[0].left_margin, np.inf))
+                constraints.append((mask[right_index], -np.inf, range_.right - population[-1].right_margin))
 
             for i in range(len(population) - 1):
                 left_lens = population[i]
@@ -627,7 +627,7 @@ class SolutionList:
 def mode_match(
     setup: Beam | OpticalSetup,
     desired_beam: Beam,
-    regions: list[Region],
+    ranges: list[ShiftingRange],
     selection: list[Lens] = [],  # noqa: B006
     min_elements: int = 1,
     max_elements: int = float("inf"),  # pyright: ignore[reportArgumentType]
@@ -646,7 +646,7 @@ def mode_match(
     Args:
         setup: Initial optical setup or initial beam.
         desired_beam: Desired output beam after the optical setup.
-        regions: Regions where lenses can be placed.
+        ranges: Shifting ranges where lenses can be placed.
         selection: Selection of lenses to choose from for mode matching.
         min_elements: Minimum number of elements to use.
         max_elements: Maximum number of elements to use.
@@ -674,7 +674,7 @@ def mode_match(
     problem = ModeMatchingProblem(
         setup=setup,
         desired_beam=desired_beam,
-        regions=regions,
+        ranges=ranges,
         selection=selection,
         min_elements=min_elements,
         max_elements=max_elements,
