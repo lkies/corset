@@ -82,6 +82,7 @@ def process_notebook(source: Path, output: Path):
             cell["metadata"] = metadata | {"raw_mimetype": "text/restructuredtext"}
             cell["source"] = [line.replace("\\", "\\\\") for line in cell["source"]]
 
+    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(notebook, indent=1), encoding="utf-8")
 
 

@@ -120,7 +120,7 @@ class Beam:
 
 # TODO general Element class?
 @dataclass(frozen=True)
-class Lens:
+class ThinLens:
     """Thin lens element including additional information."""
 
     focal_length: float  #: Focal length of the lens
@@ -141,6 +141,49 @@ class Lens:
 
     def __str__(self) -> str:
         return self.name if self.name is not None else f"f={round(self.focal_length*1e3)}mm"
+
+
+@dataclass(frozen=True)
+class ThickLens:
+    """Thick lens element including additional information."""
+
+    in_roc: float  #: Input surface radius of curvature
+    out_roc: float  #: Output surface radius of curvature
+    thickness: float  #: Thickness of the lens
+    refractive_index: float  #: Refractive index of the lens material
+    left_margin: float = 0  #: Physical size to the left of the lens center
+    right_margin: float = 0  #: Physical size to the right of the lens center
+    name: str | None = None  #: Name for reference and plotting
+
+    def __post_init__(self):
+        if self.thickness <= 0:
+            raise ValueError("Lens thickness must be positive.")
+        if self.refractive_index <= 1:
+            raise ValueError("Refractive index must be greater than 1.")
+        if self.left_margin + self.right_margin < 0:
+            raise ValueError("Lens must have non-negative physical size.")
+
+    @cached_property
+    def matrix(self) -> np.ndarray:
+        """ABCD matrix of the lens element."""
+        n2 = self.refractive_index
+        in_surface = np.array([[1, 0], [(1 - n2) / (self.in_roc * n2), 1 / n2]])
+        propagation = np.array([[1, self.thickness], [0, 1]])
+        out_surface = np.array([[1, 0], [(n2 - 1) / (self.out_roc), n2]])
+        thickness_correction = np.array([[1, -self.thickness / 2], [0, 1]])
+        return thickness_correction @ out_surface @ propagation @ in_surface @ thickness_correction
+
+    @cached_property
+    def focal_length(self) -> float:
+        """Approximate focal length of the thick lens."""
+        n2, r1, r2 = self.refractive_index, self.in_roc, self.out_roc
+        return 1 / ((n2 - 1) * (1 / r1 - 1 / r2 + ((n2 - 1) * self.thickness) / (n2 * r1 * r2)))
+
+    def __str__(self) -> str:
+        return self.name if self.name is not None else f"f≈{round(self.focal_length*1e3)}mm"
+
+
+Lens = ThinLens | ThickLens  #: Lens type union
 
 
 @dataclass(frozen=True)

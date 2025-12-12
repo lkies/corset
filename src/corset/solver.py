@@ -10,7 +10,7 @@ The actual constrained optimization is carried out using :func:`scipy.optimize.m
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
 """
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import combinations_with_replacement, pairwise
@@ -21,7 +21,7 @@ import pandas as pd
 from scipy import optimize
 
 from .analysis import ModeMatchingAnalysis
-from .core import Beam, Lens, OpticalSetup
+from .core import Beam, Lens, OpticalSetup, ThickLens, ThinLens
 from .plot import (
     fig_to_png,
     plot_mode_match_solution_all,
@@ -166,10 +166,10 @@ class ModeMatchingProblem:
     setup: OpticalSetup  #: Initial optical setup
     desired_beam: Beam  #: Desired output beam after the optical setup
     ranges: list[ShiftingRange]  #: Ranges where lenses can be placed
-    selection: list[Lens]  #: Selection of lenses to choose from for mode matching
+    selection: Sequence[Lens]  #: Selection of lenses to choose from for mode matching
     min_elements: int  #: Minimum number of elements to use
     max_elements: int  #: Maximum number of elements to use
-    constraints: list[Aperture | Passage]  #: Beam constraints on the optical setup
+    constraints: Sequence[Aperture | Passage]  #: Beam constraints on the optical setup
     # TODO make it so that the order of evaluating the candidates does not change their random values
     rng: np.random.Generator  #: Seeded random number generator for reproducibility
 
@@ -241,7 +241,7 @@ class ModeMatchingProblem:
     def lens_combinations(
         cls,
         ranges: list[ShiftingRange],
-        base_selection: list[Lens],
+        base_selection: Sequence[Lens],
         min_elements: int,
         max_elements: int,
         current_populations: list[tuple[Lens, ...]] = [],  # noqa: B006
@@ -628,11 +628,11 @@ def mode_match(
     setup: Beam | OpticalSetup,
     desired_beam: Beam,
     ranges: list[ShiftingRange],
-    selection: list[Lens] = [],  # noqa: B006
+    selection: Sequence[Lens] = [],
     min_elements: int = 1,
     max_elements: int = float("inf"),  # pyright: ignore[reportArgumentType]
-    constraints: list[Aperture | Passage] = [],  # noqa: B006
-    filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = None,
+    constraints: Sequence[Aperture | Passage] = [],
+    filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = 0.999,  # allow for some numerical error
     random_initial_positions: int = 0,
     solution_per_population: int = 1,
     equal_setup_tol: float = 1e-3,
