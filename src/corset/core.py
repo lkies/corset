@@ -10,6 +10,7 @@ using the ray transfer matrix method for Gaussian beams, see `here <https://en.w
 from dataclasses import InitVar, dataclass
 from functools import cached_property
 from itertools import pairwise
+from typing import ClassVar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -145,15 +146,21 @@ class ThinLens:
 
 @dataclass(frozen=True)
 class ThickLens:
-    """Thick lens element including additional information."""
+    """Thick lens element including additional information.
 
-    in_roc: float  #: Input surface radius of curvature
-    out_roc: float  #: Output surface radius of curvature
+    A positive radius of curvature is a convex surface while a negative radius is concave.
+    Use :attr:`ThickLens.FLAT` to represent a flat surface. This is an alias for ``float('inf')``.
+    """
+
+    in_roc: float  #: Input surface radius of curvature, positive is convex
+    out_roc: float  #: Output surface radius of curvature, positive is convex
     thickness: float  #: Thickness of the lens
     refractive_index: float  #: Refractive index of the lens material
     left_margin: float = 0  #: Physical size to the left of the lens center
     right_margin: float = 0  #: Physical size to the right of the lens center
     name: str | None = None  #: Name for reference and plotting
+
+    FLAT: ClassVar[float] = float("inf")  #: Surface radius representing a flat surface
 
     def __post_init__(self):
         if self.thickness <= 0:
@@ -169,7 +176,7 @@ class ThickLens:
         n2 = self.refractive_index
         in_surface = np.array([[1, 0], [(1 - n2) / (self.in_roc * n2), 1 / n2]])
         propagation = np.array([[1, self.thickness], [0, 1]])
-        out_surface = np.array([[1, 0], [(n2 - 1) / (self.out_roc), n2]])
+        out_surface = np.array([[1, 0], [(n2 - 1) / (-self.out_roc), n2]])
         thickness_correction = np.array([[1, -self.thickness / 2], [0, 1]])
         return thickness_correction @ out_surface @ propagation @ in_surface @ thickness_correction
 
@@ -177,7 +184,7 @@ class ThickLens:
     def focal_length(self) -> float:
         """Approximate focal length of the thick lens."""
         n2, r1, r2 = self.refractive_index, self.in_roc, self.out_roc
-        return 1 / ((n2 - 1) * (1 / r1 - 1 / r2 + ((n2 - 1) * self.thickness) / (n2 * r1 * r2)))
+        return 1 / ((n2 - 1) * (1 / r1 + 1 / r2 + ((1 - n2) * self.thickness) / (n2 * r1 * r2)))
 
     def __str__(self) -> str:
         return self.name if self.name is not None else f"f≈{round(self.focal_length*1e3)}mm"
