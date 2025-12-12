@@ -2,7 +2,7 @@ name: Build and deploy docs to GitHub Pages
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
   workflow_dispatch: {}
 
 jobs:
