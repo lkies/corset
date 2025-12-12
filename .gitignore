@@ -11,3 +11,9 @@ docs/source/gen/
 
 # Distribution files
 dist/
+
+# Local files
+local/
+
+# VSCode settings
+.vscode/
