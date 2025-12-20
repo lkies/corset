@@ -71,11 +71,13 @@ def make_mode_overlap(solution: "ModeMatchingSolution") -> Callable[[np.ndarray]
     Returns:
         A function that takes an array of element positions and returns the mode overlap.
     """
-    from . import solver
+    from . import core, solver
 
     def overlap(positions: np.ndarray) -> float:
         setup = solution.candidate.parametrized_setup.substitute(positions, validate=False)
-        final_beam = setup.beams[-1]
+        final_beam = core.Beam(
+            setup.beam_parameters[-1], z_offset=setup.elements[-1][0], wavelength=setup.initial_beam.wavelength
+        )
         problem = solution.candidate.problem
         return solver.mode_overlap(
             final_beam.focus - problem.desired_beam.focus,
@@ -99,7 +101,7 @@ def make_focus_and_waist(solution: "ModeMatchingSolution") -> Callable[[np.ndarr
 
     def focus_and_waist(positions: np.ndarray) -> np.ndarray:
         setup = solution.candidate.parametrized_setup.substitute(positions, validate=False)
-        final_beam = setup.beams[-1]
+        final_beam = setup.beams_fast[-1]
         return np.array([final_beam.focus, final_beam.waist])
 
     return focus_and_waist
@@ -279,8 +281,8 @@ class ModeMatchingAnalysis:
         """Create a summary dictionary of the analysis results
 
         Args:
-            sensitivity_unit: The unit to use for sensitivities in the summary. If `None` the default from :class:`Config` is used.
-                If `False`, the raw sensitivities without unit conversion are used.
+            sensitivity_unit: The unit to use for sensitivities in the summary. If `None` the default from
+                :class:`Config` is used. If `False`, the raw sensitivities without unit conversion are used.
 
         Returns:
             A dictionary containing the summary data. The keys are:

@@ -1,20 +1,25 @@
 """Plotting functions for optical setups and mode matching solutions and analyses."""
 
 from dataclasses import dataclass
-from functools import cached_property
 from io import BytesIO
+from itertools import product
 from typing import TYPE_CHECKING, Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
-from matplotlib.collections import FillBetweenPolyCollection, LineCollection
+from matplotlib.collections import (
+    FillBetweenPolyCollection,
+    LineCollection,
+    PathCollection,
+)
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 from matplotlib.text import Annotation
 from matplotlib.ticker import FuncFormatter
+from scipy import stats
 
 from .config import Config
 
@@ -52,12 +57,10 @@ class OpticalSetupPlot:
     zs: np.ndarray  #: Z-coordinates of the beam profile
     rs: np.ndarray  #: Radii of the beam profile
     beam: FillBetweenPolyCollection  #: Fill between collection for the beam
-    lenses: list[tuple[LineCollection, Annotation]]  #: List of lens plot elements
-
-    @cached_property
-    def r_max(self) -> float:
-        """Maximum beam radius in the plot."""
-        return np.max(self.rs)
+    beam_ci: list[Line2D]  #: List of lines representing beam confidence intervals
+    lenses: list[tuple[LineCollection, Annotation, Rectangle | None]]  #: List of lens plot elements
+    handles: list[tuple[str, Any]]  #: List of plot handles by their legend labels
+    r_max: float  #: Maximum beam radius in the plot
 
 
 @dataclass(frozen=True)
@@ -72,13 +75,32 @@ class ModeMatchingPlot:
     passages: list[Rectangle]  #: List of passage rectangles in the plot
 
 
-def plot_optical_setup(
+def get_handles(ax: Axes) -> list[tuple[str, Any]]:
+    """Get a list of plot handles by their legend labels.
+
+    Args:
+        ax: The axes to get the handles from.
+
+    Returns:
+        A list of tuples containing legend labels and their corresponding plot handles, empty if no legend exists.
+    """
+
+    legend = ax.get_legend()
+    if legend is None:
+        return []
+    return [(text.get_text(), handle) for handle, text in zip(legend.legend_handles, legend.texts, strict=True)]
+
+
+# TODO refactor this function to reduce complexity
+def plot_optical_setup(  # noqa: C901
     self: "OpticalSetup",
     *,
     ax: Axes | None = None,
+    legend: bool = False,
     points: int | np.ndarray | None = None,
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict = {"color": "C0", "alpha": 0.5},  # noqa: B006
+    confidence_interval: float | None = 0.95,
     free_lenses: list[int] = [],  # noqa: B006
     # TODO add back other configuration options?
 ) -> OpticalSetupPlot:
@@ -86,10 +108,12 @@ def plot_optical_setup(
 
     Args:
         self: The optical setup instance.
+        legend: Whether to show a legend for the plot.
         ax: The axes to plot on. If `None`, the current axes are used.
         points: Number of points or specific z-coordinates to evaluate the beam profile. If `None`, 500 points are used.
         limits: Z-coordinate limits for the plot. If `None`, limits are determined from the beam and elements.
         beam_kwargs: Additional keyword arguments passed to the beam plot.
+        confidence_interval: Confidence interval probability for beam uncertainty visualization. If `None`, no uncertainty is plotted.
         free_lenses: Indices of lenses to treat as free elements in the plot.
 
     Returns:
@@ -120,43 +144,47 @@ def plot_optical_setup(
         num_points = points if isinstance(points, int) else 500
         zs = np.linspace(limits[0], limits[1], num_points)
 
-    rs = self.radius(zs)
-    fb_col = ax.fill_between(zs, -rs, rs, **{"zorder": 100, **beam_kwargs})
-    # TODO make beam plot function?
+    handles = get_handles(ax)
 
-    w_max = np.max(rs)
+    rs = cast(np.ndarray, self.radius(zs))
+    fill_between = ax.fill_between(zs, -rs, rs, **{"zorder": 100, **beam_kwargs})
+    beam_label = beam_kwargs.get("label", "Beam")
+    handles.append((beam_label, fill_between))
+    r_max = np.max(rs)
+
+    beam_deviation = []
+    if confidence_interval is not None and self.beams[0].gauss_cov is not None:
+        rs_ci = self.radius_dev(zs) * stats.norm.interval(confidence_interval)[1]
+        ci_color = beam_kwargs.get("color")
+        if ci_color is None or ci_color == "none":
+            ci_color = beam_kwargs.get("edgecolor")
+        for r0, ci in product([-rs, rs], [-rs_ci, rs_ci]):
+            line = ax.plot(zs, r0 + ci, ls="--", color=ci_color, alpha=beam_kwargs.get("alpha"), zorder=105)[0]
+            beam_deviation.append(line)
+        r_max = np.max(rs + rs_ci)
+        handles.append((f"{round(confidence_interval*100)}% CI ({beam_label})", beam_deviation[0]))
+    # TODO make beam plot function?
 
     # TODO factor out into plot lens function?
     lenses = []
     for i, (pos, lens) in enumerate(self.elements):
         color = "C2"
         zorder = 200
-        if lens.left_margin or lens.right_margin:
-            rect = Rectangle(
-                (pos - lens.left_margin, -w_max * (1 + RELATIVE_MARGIN)),
-                lens.left_margin + lens.right_margin,
-                2 * w_max * (1 + RELATIVE_MARGIN),
-                fc="none",
-                ec=color,
-                ls="--",
-                zorder=zorder,
-            )
-            ax.add_patch(rect)
 
-        lens_col = ax.vlines(
+        line = ax.vlines(
             pos,
-            -w_max * (1 + RELATIVE_MARGIN),
-            w_max * (1 + RELATIVE_MARGIN),
+            -r_max * (1 + RELATIVE_MARGIN),
+            r_max * (1 + RELATIVE_MARGIN),
             color=color,
             zorder=zorder,
         )
-        # TODO label and enumerate free lenses?
+
         label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length*1e3)}mm"
         if i in free_lenses:
             label_text = f"$L_{i}$: {label_text} @{round(pos*1e3)}mm"
         label = ax.text(
             pos,
-            -w_max * (1 + RELATIVE_MARGIN),
+            -r_max * (1 + RELATIVE_MARGIN),
             label_text,
             va="center",
             ha="left",
@@ -166,11 +194,31 @@ def plot_optical_setup(
             zorder=zorder,
         )
 
-        lenses.append((lens_col, label))
+        rect = None
+        if lens.left_margin or lens.right_margin:
+            rect = Rectangle(
+                (pos - lens.left_margin, -r_max * (1 + RELATIVE_MARGIN)),
+                lens.left_margin + lens.right_margin,
+                2 * r_max * (1 + RELATIVE_MARGIN),
+                fc="none",
+                ec=color,
+                ls="--",
+                zorder=zorder,
+            )
+            ax.add_patch(rect)
+
+        lenses.append((line, label, rect))
+
+    if lenses and not any(label == "Lens" for label, _ in handles):
+        # fake handle with vertical line marker
+        handles.append(("Lens", Line2D([], [], color=color, label="Lens", marker="|", linestyle="None", markersize=10)))
+    rectangles = [r for _, _, r in lenses if r is not None]
+    if rectangles and not any(label == "Lens Margin" for label, _ in handles):
+        handles.append(("Lens Margin", rectangles[0]))
 
     ax.set_ylim(
-        min(-w_max * (1 + 3 * RELATIVE_MARGIN), ax.get_ylim()[0]),
-        max(w_max * (1 + 3 * RELATIVE_MARGIN), ax.get_ylim()[1]),
+        min(-r_max * (1 + 3 * RELATIVE_MARGIN), ax.get_ylim()[0]),
+        max(r_max * (1 + 3 * RELATIVE_MARGIN), ax.get_ylim()[1]),
     )
 
     ax.set_xlabel("z in mm")
@@ -179,15 +227,30 @@ def plot_optical_setup(
     ax.set_ylabel(r"w(z) in $\mathrm{\mu m}$")
     ax.yaxis.set_major_formatter(micro_formatter)
 
-    return OpticalSetupPlot(ax=ax, zs=zs, rs=rs, beam=fb_col, lenses=lenses)  # pyright: ignore[reportArgumentType]
+    if legend:
+        ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc="lower left").set_zorder(1000)
+
+    return OpticalSetupPlot(
+        ax=ax,
+        zs=zs,
+        rs=rs,
+        beam=fill_between,
+        beam_ci=beam_deviation,
+        lenses=lenses,
+        handles=handles,
+        r_max=r_max,
+    )
 
 
-def plot_mode_match_solution_setup(self: "ModeMatchingSolution", *, ax: Axes | None = None) -> ModeMatchingPlot:
+def plot_mode_match_solution_setup(
+    self: "ModeMatchingSolution", *, ax: Axes | None = None, legend: bool = False
+) -> ModeMatchingPlot:
     """Plot the mode matching solution setup including the desired beam and constraints.
 
     Args:
         self: The mode matching solution instance.
         ax: The axes to plot on. If `None`, the current axes are used.
+        legend: Whether to show a legend for the plot.
     Returns:
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
@@ -198,8 +261,15 @@ def plot_mode_match_solution_setup(self: "ModeMatchingSolution", *, ax: Axes | N
 
     problem = self.candidate.problem
 
-    setup_plot = plot_optical_setup(self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements)
-    desired_plot = plot_optical_setup(OpticalSetup(problem.desired_beam, []), ax=ax, beam_kwargs={"color": "C1"})
+    setup_plot = plot_optical_setup(
+        self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements, legend=legend
+    )
+    desired_plot = plot_optical_setup(
+        OpticalSetup(problem.desired_beam, []),
+        ax=ax,
+        beam_kwargs={"color": "C1", "label": "Desired Beam"},
+        legend=legend,
+    )
 
     ranges = []
     for range_ in problem.ranges:
@@ -249,6 +319,8 @@ class ReachabilityPlot:
     """Plot of a reachability analysis with references to the plot elements."""
 
     ax: Axes  #: Axes containing the plot
+    center: PathCollection  #: Point representing the optimal focus and waist
+    center_ci: Line2D | None  #: Uncertainty of the arriving beam around the optimal point
     lines: list[list[Line2D]]  #: Lines representing parameter variations
     contour: Any  #: Contour plot of the mode overlap
     colorbar: Colorbar | None  #: Colorbar for the contour plot
@@ -273,6 +345,7 @@ def plot_reachability(
     dimensions: list[int] | None = None,
     focus_range: tuple[float, float] | None = None,
     waist_range: tuple[float, float] | None = None,
+    confidence_interval: float | None = 0.95,
     ax: Axes | None = None,
 ) -> ReachabilityPlot:
     """Plot a reachability analysis of the mode matching solution.
@@ -324,7 +397,17 @@ def plot_reachability(
     focuses, waists = np.moveaxis(focus_and_waist(grids), -1, 0)
     delta_focuses = focuses - self.candidate.problem.desired_beam.focus
 
-    ax.scatter(0, self.candidate.problem.desired_beam.waist, color=plt.rcParams["text.color"], marker="o", zorder=100)
+    contrast_color = plt.rcParams["text.color"]
+    center = ax.scatter(0, self.candidate.problem.desired_beam.waist, color=contrast_color, marker="o", zorder=100)
+    center_ci = None
+    if confidence_interval is not None and self.setup.beams[-1].gauss_cov is not None:
+        # plot the confidence ellipse around the optimal point
+        eigenvalues, eigenvectors = np.linalg.eigh(self.setup.beams[-1].gauss_cov)
+        theta = np.linspace(0, 2 * np.pi, 100)
+        scales = (np.sqrt(eigenvalues) * stats.norm.interval(confidence_interval)[1])[:, np.newaxis]
+        offset = np.array([[0], [self.candidate.problem.desired_beam.waist]])
+        ellipse = offset + eigenvectors @ (np.array([np.cos(theta), np.sin(theta)]) * scales)
+        center_ci = ax.plot(*ellipse, ls="--", color=contrast_color, zorder=100)[0]
 
     def select_lines(arr: np.ndarray, dim: int, steps: list[int]) -> np.ndarray:
         steps = [step if i != dim else 1 for i, step in enumerate(steps)]
@@ -346,7 +429,7 @@ def plot_reachability(
             arrowprops={"color": f"C{i}", "headwidth": 10, "width": 2},
         )
 
-    ax.legend(handles=[line[0] for line in lines])
+    ax.legend(handles=[line[0] for line in lines], loc="lower left").set_zorder(1000)
 
     grid_n = 50
     focuses_grid, waists_grid = np.meshgrid(np.linspace(*ax.get_xlim(), grid_n), np.linspace(*ax.get_ylim(), grid_n))
@@ -372,7 +455,7 @@ def plot_reachability(
 
     ax.set_title("Reachability Analysis")
 
-    return ReachabilityPlot(ax=ax, lines=lines, contour=res, colorbar=cb)
+    return ReachabilityPlot(ax=ax, center=center, center_ci=center_ci, lines=lines, contour=res, colorbar=cb)
 
 
 def plot_sensitivity(
@@ -478,7 +561,7 @@ def plot_sensitivity(
             Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value*1e3:.1f}$ mm")
             for color, value in zip(z_colors, zs, strict=True)
         ]
-        ax.legend(handles=handles).set_zorder(1000)
+        ax.legend(handles=handles, loc="lower left").set_zorder(1000)
 
     unit = Config.sensitivity_unit
     dims = dimensions
