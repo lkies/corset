@@ -450,7 +450,7 @@ def plot_reachability(
     ax.set_xlabel(rf"$\Delta z_0$ in mm ($\nabla z_0$=[{' '.join(f'{x:.3f}' for x in jacobian[0])}])")
     ax.xaxis.set_major_formatter(milli_formatter)
 
-    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jacobian[1]*1e3)}]e-3")
+    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jacobian[1]*1e3)}]e-3)")
     ax.yaxis.set_major_formatter(micro_formatter)
 
     ax.set_title("Reachability Analysis")

@@ -70,6 +70,9 @@ class Beam:
 
         Returns:
             Beam radius deviation at the specified axial position(s).
+
+        Raises:
+            ValueError: If the covariance matrix is not defined for this beam.
         """
         # derivation:
         """
@@ -131,7 +134,7 @@ class Beam:
             p0: Initial guess for (focus, waist). If omitted a simple heuristic is used.
 
         Returns:
-            Beam instance fitted to the data..
+            Beam instance fitted to the data.
         """
         if p0 is None:  # TODO is this a good idea?
             p0 = (positions[np.argmin(radii)], np.min(radii))

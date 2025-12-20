@@ -70,6 +70,9 @@ class ParametrizedSetup:
         Returns:
             The resulting optical setup with substituted positions.
 
+        Raises:
+            ValueError: If the number of provided positions does not match the number of free parameters.
+
         """
         substituted_elements = []
         pos_index = 0
@@ -295,14 +298,17 @@ class ModeMatchingCandidate:
     populations: list[tuple[Lens, ...]]  #: Lens populations for each range
 
     # TODO seeding?
-    def generate_initial_positions(self, random: bool) -> np.ndarray:
+    def generate_initial_positions(self, randomize: bool) -> np.ndarray:
         """Generate a set of initial positions for free lenses of the candidate.
 
         Args:
-            random: Whether to generate random initial positions or evenly spaced positions.
+            randomize: Whether to generate random initial positions or evenly spaced positions.
 
         Returns:
             Array of initial positions for the lenses.
+
+        Raises:
+            ValueError: If there is not enough space in a range for the lenses with their margins.
         """
         positions = []
         for range_, population in zip(self.problem.ranges, self.populations, strict=True):
@@ -313,7 +319,7 @@ class ModeMatchingCandidate:
             if available_space < 0:
                 raise ValueError("Not enough space in range for the lenses with their margins")
 
-            if random:
+            if randomize:
                 distances = np.diff(np.sort(self.problem.rng.uniform(0, available_space, len(population))), prepend=0)
             else:
                 distances = np.repeat(available_space / (len(population) + 1), len(population))
@@ -390,7 +396,7 @@ class ModeMatchingCandidate:
         filter_pred: Callable[["ModeMatchingSolution"], bool],
         random_initial_positions: int,
         equal_setup_tol: float,
-        solution_per_population: int,
+        max_solutions: int,
         # optimize_coupling: bool,
     ) -> list["ModeMatchingSolution"]:
         """Optimize the candidate to find mode matching solutions.
@@ -399,14 +405,14 @@ class ModeMatchingCandidate:
             filter_pred: Predicate function that must return True for a solution to be accepted.
             random_initial_positions: Number of random initial positions to generate in addition to the equally spaced one.
             equal_setup_tol: Tolerance for considering two solutions as equal for eliminating duplicates.
-            solution_per_population: Maximum number of solutions to optimize and return.
+            max_solutions: Maximum number of solutions to optimize and return.
 
         Returns:
             List of optimized mode matching solutions for the candidate.
         """
-        initial_setups = [self.generate_initial_positions(random=False)]
+        initial_setups = [self.generate_initial_positions(randomize=False)]
         for _ in range(random_initial_positions):
-            initial_setups.append(self.generate_initial_positions(random=True))
+            initial_setups.append(self.generate_initial_positions(randomize=True))
 
         # TODO unify this with the make_mode_overlap function in analyze.py?
         def objective(positions: np.ndarray) -> float:
@@ -427,7 +433,7 @@ class ModeMatchingCandidate:
         solution_positions = []  # for this lens population
         constrained_initial_setups = []
         for x0 in initial_setups:
-            if len(solutions) >= solution_per_population:
+            if len(solutions) >= max_solutions:
                 break
 
             if self.problem.constraints:
@@ -520,6 +526,9 @@ class ModeMatchingSolution:
 
         Returns:
             A new :class:`ModeMatchingSolution` with improved coupling if successful, otherwise None.
+
+        Raises:
+            ValueError: If there are not enough free parameters or if the solution does not have ~100% mode overlap.
         """
 
         from . import analysis
@@ -634,7 +643,7 @@ def mode_match(
     constraints: Sequence[Aperture | Passage] = [],
     filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = 0.999,  # allow for some numerical error
     random_initial_positions: int = 0,
-    solution_per_population: int = 1,
+    solutions_per_candidate: int = 1,
     equal_setup_tol: float = 1e-3,
     random_seed: int = 0,
     # optimize_coupling: bool = False,
@@ -653,7 +662,7 @@ def mode_match(
         constraints: Beam constraints on the resulting optical setup.
         filter_pred: Predicate function or minimum overlap float to filter solutions.
         random_initial_positions: Number of random initial positions to generate per candidate.
-        solution_per_population: Maximum number of solutions to optimize and return per lens population.
+        solutions_per_candidate: Maximum number of solutions to optimize and return per candidate i.e. lens population.
         equal_setup_tol: Tolerance for considering two solutions as equal for eliminating duplicates.
         random_seed: Random seed for reproducibility.
 
@@ -690,7 +699,7 @@ def mode_match(
                 filter_pred=filter_pred,  # pyright: ignore[reportArgumentType]
                 random_initial_positions=random_initial_positions,
                 equal_setup_tol=equal_setup_tol,
-                solution_per_population=solution_per_population,
+                max_solutions=solutions_per_candidate,
                 # optimize_coupling=optimize_coupling,
             )
         )
