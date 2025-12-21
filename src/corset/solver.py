@@ -10,7 +10,7 @@ The actual constrained optimization is carried out using :func:`scipy.optimize.m
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
 """
 
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import combinations_with_replacement, pairwise
@@ -21,7 +21,7 @@ import pandas as pd
 from scipy import optimize
 
 from .analysis import ModeMatchingAnalysis
-from .core import Beam, Lens, OpticalSetup, ThickLens, ThinLens
+from .core import Beam, Lens, OpticalSetup
 from .plot import (
     fig_to_png,
     plot_mode_match_solution_all,
@@ -45,11 +45,11 @@ class ShiftingRange:
 
     def __post_init__(self):
         if self.right <= self.left:
-            raise ValueError("Range right boundary must be greater than left boundary")
+            raise ValueError("Range right boundary must be greater than left boundary.")
         if self.min_elements < 0:
-            raise ValueError("min_elements cannot be negative")
+            raise ValueError("min_elements cannot be negative.")
         if self.max_elements < self.min_elements:
-            raise ValueError("max_elements cannot be less than min_elements")
+            raise ValueError("max_elements cannot be less than min_elements.")
 
 
 @dataclass(frozen=True)
@@ -83,9 +83,9 @@ class ParametrizedSetup:
                     pos_index += 1
                 substituted_elements.append((pos, element))
         except IndexError as e:
-            raise ValueError("Not enough positions provided to substitute all parametrized elements") from e
+            raise ValueError("Not enough positions provided to substitute all parametrized elements.") from e
         if pos_index < len(positions):
-            raise ValueError("Too many positions provided for the number of parametrized elements")
+            raise ValueError("Too many positions provided for the number of parametrized elements.")
         return OpticalSetup(self.initial_beam, substituted_elements, validate)
 
     @cached_property
@@ -96,52 +96,76 @@ class ParametrizedSetup:
 
 @dataclass(frozen=True)
 class Aperture:
-    """Aperture constraint for the optical setup."""
+    """Aperture constraint for a mode matching problem."""
 
     position: float  #: Axial position of the aperture
-    radius: float  #: Aperture radius, i.e. maximum beam radius at this position.
+    radius: float  #: Aperture radius
+    power: float = float(1 - np.exp(-2))
+    r"""Minimum fraction of power that must pass through the aperture.
+    If set to :math:`1 - e^{-2} \approx 0.865`, the beam's :math:`1/e` amplitude
+    radius at the aperture is constrained to be smaller than the aperture radius."""
 
     def __post_init__(self):
         if self.radius <= 0:
-            raise ValueError("Aperture radius must be positive")
+            raise ValueError("Aperture radius must be positive.")
 
     @cached_property
-    def apertures(self) -> tuple["Aperture"]:
-        """A tuple containing this aperture. Used for uniform interface with :class:`Passage`."""
-        return (self,)
+    def radius_constraints(self) -> list[tuple[float, float]]:
+        """A list containing this aperture as a normalized :math:`1/e` beam radius constraint
+        tuple (position, radius). This is a tuple of a tuple to provide a uniform interface
+        with :class:`Passage` which is a tuple of two tuple.
+        """
+        return [(self.position, np.sqrt(-2 / np.log(1 - self.power)) * self.radius)]
 
 
 @dataclass(frozen=True)
 class Passage:
+    """Passage constraint for a mode matching problem.
+    A passage from `left` to `right` with given `radius` is represented (i.e. equivalent)
+    to two :class:`Aperture` constraints with `radius` at the `left` and `right` boundaries.
+    """
+
     left: float  #: Left boundary of the passage
     right: float  #: Right boundary of the passage
-    radius: float  #: Passage radius, i.e. maximum beam radius within the passage
+    radius: float  #: Passage radius
+    power: float = float(1 - np.exp(-2))
+    r"""Minimum fraction of power that must pass through the passage (approximately).
+    Since the passage is represented as two apertures, this is really just the power
+    fraction of the respective apertures. If set to :math:`1 - e^{-2} \approx 0.865`,
+    the beam's :math:`1/e` amplitude radius at the apertures is constrained to be smaller
+    than the passage radius. See :attr:`Aperture.power`.
+    """
 
     def __post_init__(self):
         if self.right <= self.left:
-            raise ValueError("Left boundary must be less than right boundary")
+            raise ValueError("Left boundary must be less than right boundary.")
         if self.radius <= 0:
-            raise ValueError("Passage radius must be positive")
+            raise ValueError("Passage radius must be positive.")
 
     @classmethod
-    def centered(cls, center: float, width: float, radius: float) -> "Passage":
+    def centered(cls, center: float, width: float, radius: float, power: float = float(1 - np.exp(-2))) -> "Passage":
         """Convenience constructor for a passage centered at a given position.
 
         Args:
             center: Center position of the passage.
             width: Width of the passage.
             radius: Passage radius.
+            power: Minimum power fraction that must pass through the passage.
+
 
         Returns:
             Passage instance centered at the given position.
         """
         half_width = width / 2
-        return cls(left=center - half_width, right=center + half_width, radius=radius)
+        return cls(left=center - half_width, right=center + half_width, radius=radius, power=power)
 
     @cached_property
-    def apertures(self) -> tuple[Aperture, Aperture]:
-        """Representation of the constraint as two :class:`Aperture` constraints at the passage boundaries."""
-        return (Aperture(self.left, self.radius), Aperture(self.right, self.radius))
+    def radius_constraints(self) -> list[tuple[float, float]]:
+        """Representation of the constraint as two normalized :math:`1/e` beam radius constraints.
+        A list of two tuples (position, radius) for the left and right boundaries.
+        """
+        normalized_radius = np.sqrt(-2 / np.log(1 - self.power)) * self.radius
+        return [(self.left, normalized_radius), (self.right, normalized_radius)]
 
 
 # TODO should this be a member of Beam?
@@ -182,42 +206,41 @@ class ModeMatchingProblem:
         self._verify_no_overlaps()
         if self.setup.initial_beam.wavelength != self.desired_beam.wavelength:
             # testing for equality of floats should be fine here since they should come from the same source
-            raise ValueError("Setup initial beam and desired beam must have the same wavelength")
+            raise ValueError("Setup initial beam and desired beam must have the same wavelength.")
 
     def _verify_selection(self):
         if self.min_elements < 1:
-            raise ValueError("Global min_elements must be at least 1")
+            raise ValueError("Global min_elements must be at least 1.")
 
         if self.max_elements is not None and self.max_elements < self.min_elements:
-            raise ValueError("Global max_elements cannot be less than min_elements")
+            raise ValueError("Global max_elements cannot be less than min_elements.")
 
         total_min = sum(r.min_elements for r in self.ranges)
         total_max = sum(r.max_elements for r in self.ranges)
 
         if total_max == float("inf") and self.max_elements == float("inf"):
-            raise ValueError("Cannot have unbounded maximum elements when global maximum is not set")
+            raise ValueError("Cannot have unbounded maximum elements when global maximum is not set.")
 
         if total_min > self.max_elements:
-            raise ValueError("Sum of range minimum elements exceeds global maximum elements")
+            raise ValueError("Sum of range minimum elements exceeds global maximum elements.")
         if total_max < self.min_elements:
-            raise ValueError("Sum of range maximum elements is less than global minimum elements")
+            raise ValueError("Sum of range maximum elements is less than global minimum elements.")
 
     def _verify_no_overlaps(self):
         regions: list[tuple[float, float, Any]] = []  # left right
         regions.extend((pos, pos, element) for pos, element in self.setup.elements)
         regions.extend((range_.left, range_.right, range_) for range_ in self.ranges)
-        regions.extend((ap.position, ap.position, ap) for ap in self.aperture_constraints if isinstance(ap, Aperture))
+        regions.extend((ap.position, ap.position, ap) for ap in self.radius_constraints if isinstance(ap, Aperture))
         regions.extend((pas.left, pas.right, pas) for pas in self.constraints if isinstance(pas, Passage))
         regions.sort(key=lambda x: x[0])
         for r1, r2 in pairwise(regions):
             if r1[1] > r2[0]:
-                raise ValueError(f"Overlapping regions/elements detected: {r1[2]} and {r2[2]}")
+                raise ValueError(f"Overlapping regions/elements detected: {r1[2]} and {r2[2]}.")
 
     @cached_property
-    def aperture_constraints(self) -> list[Aperture]:
-        """List of all constraints as :class:`Aperture` constraints.
-        :class:`Passage` constraints are converted to two :class:`Aperture` constraints."""
-        return [aperture for constraint in self.constraints for aperture in constraint.apertures]
+    def radius_constraints(self) -> list[tuple[float, float]]:
+        """List of all constraints as :math:`1/e` beam radius constraint tuples (position, radius)."""
+        return [con for constraint in self.constraints for con in constraint.radius_constraints]
 
     @cached_property
     def interleaved_elements(self) -> list[tuple[float, Lens] | int]:
@@ -317,7 +340,7 @@ class ModeMatchingCandidate:
             total_margin = sum(lens.left_margin + lens.right_margin for lens in population)
             available_space = range_.right - range_.left - total_margin
             if available_space < 0:
-                raise ValueError("Not enough space in range for the lenses with their margins")
+                raise ValueError("Not enough space in range for the lenses with their margins.")
 
             if randomize:
                 distances = np.diff(np.sort(self.problem.rng.uniform(0, available_space, len(population))), prepend=0)
@@ -381,7 +404,7 @@ class ModeMatchingCandidate:
     @cached_property
     def beam_constraint(self) -> optimize.NonlinearConstraint:
         """Nonlinear constraint to ensure beam radius is within aperture constraints."""
-        zs, rs = np.transpose([(c.position, c.radius) for c in self.problem.aperture_constraints])
+        zs, rs = np.transpose(self.problem.radius_constraints)
         return optimize.NonlinearConstraint(
             lambda x, zs=zs, rs=rs, s=self.parametrized_setup: s.substitute(x, validate=False).radius(zs) / rs, 0, 1
         )
@@ -535,9 +558,9 @@ class ModeMatchingSolution:
 
         if not len(self.positions) > 2:
             return None
-            # raise ValueError("Need at least 3 free parameters to optimize coupling")
+            # raise ValueError("Need at least 3 free parameters to optimize coupling.")
         if self.overlap < 1 - 1e-3:
-            raise ValueError("Can only optimize coupling for solutions ~100% mode overlap")
+            raise ValueError("Can only optimize coupling for solutions ~100% mode overlap.")
 
         focus_and_waist = analysis.make_focus_and_waist(self)
         desired_beam = self.candidate.problem.desired_beam
@@ -597,7 +620,7 @@ class SolutionList:
     def __len__(self) -> int:
         return len(self.solutions)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[ModeMatchingSolution]:
         return iter(self.solutions)
 
     @cached_property
