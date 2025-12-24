@@ -3,3 +3,4 @@
 
 .. automodule:: corset.solver
     :members:
+    :inherited-members:

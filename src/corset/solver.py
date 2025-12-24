@@ -29,10 +29,11 @@ from .plot import (
     plot_reachability,
     plot_sensitivity,
 )
+from .serialize import YamlSerializableMixin
 
 
 @dataclass(frozen=True)
-class ShiftingRange:
+class ShiftingRange(YamlSerializableMixin):
     """Range where lenses can be placed."""
 
     left: float  #: Range left boundary
@@ -53,7 +54,7 @@ class ShiftingRange:
 
 
 @dataclass(frozen=True)
-class ParametrizedSetup:
+class ParametrizedSetup(YamlSerializableMixin):
     """Parametrized optical setup where some or all element positions are free parameters."""
 
     initial_beam: Beam  #: Initial beam before left most element
@@ -95,7 +96,7 @@ class ParametrizedSetup:
 
 
 @dataclass(frozen=True)
-class Aperture:
+class Aperture(YamlSerializableMixin):
     """Aperture constraint for a mode matching problem."""
 
     position: float  #: Axial position of the aperture
@@ -119,7 +120,7 @@ class Aperture:
 
 
 @dataclass(frozen=True)
-class Passage:
+class Passage(YamlSerializableMixin):
     """Passage constraint for a mode matching problem.
     A passage from `left` to `right` with given `radius` is represented (i.e. equivalent)
     to two :class:`Aperture` constraints with `radius` at the `left` and `right` boundaries.
@@ -187,7 +188,7 @@ def mode_overlap(delta_z: float, waist_a: float, waist_b: float, wavelength: flo
 
 
 @dataclass(frozen=True)
-class ModeMatchingProblem:
+class ModeMatchingProblem(YamlSerializableMixin):
     """Mode matching problem definition."""
 
     setup: OpticalSetup  #: Initial optical setup
@@ -197,8 +198,6 @@ class ModeMatchingProblem:
     min_elements: int  #: Minimum number of elements to use
     max_elements: int  #: Maximum number of elements to use
     constraints: Sequence[Aperture | Passage]  #: Beam constraints on the optical setup
-    # TODO make it so that the order of evaluating the candidates does not change their random values
-    rng: np.random.Generator  #: Seeded random number generator for reproducibility
 
     # TODO maybe also verify that there is a combination of lenses that can fit in the ranges?
     def __post_init__(self):
@@ -314,18 +313,20 @@ class ModeMatchingProblem:
 
 
 @dataclass(frozen=True)
-class ModeMatchingCandidate:
+class ModeMatchingCandidate(YamlSerializableMixin):
     """A candidate lens population for a mode matching problem."""
 
     problem: ModeMatchingProblem  #: The parent mode matching problem
     populations: list[tuple[Lens, ...]]  #: Lens populations for each range
 
-    # TODO seeding?
-    def generate_initial_positions(self, randomize: bool) -> np.ndarray:
+    def generate_initial_positions(
+        self, randomize: bool, rng: np.random.Generator = np.random.default_rng()  # noqa: B008
+    ) -> np.ndarray:
         """Generate a set of initial positions for free lenses of the candidate.
 
         Args:
             randomize: Whether to generate random initial positions or evenly spaced positions.
+            rng: Random number generator to use for random positions.
 
         Returns:
             Array of initial positions for the lenses.
@@ -343,7 +344,7 @@ class ModeMatchingCandidate:
                 raise ValueError("Not enough space in range for the lenses with their margins.")
 
             if randomize:
-                distances = np.diff(np.sort(self.problem.rng.uniform(0, available_space, len(population))), prepend=0)
+                distances = np.diff(np.sort(rng.uniform(0, available_space, len(population))), prepend=0)
             else:
                 distances = np.repeat(available_space / (len(population) + 1), len(population))
 
@@ -420,6 +421,7 @@ class ModeMatchingCandidate:
         random_initial_positions: int,
         equal_setup_tol: float,
         max_solutions: int,
+        rng: np.random.Generator = np.random.default_rng(),  # noqa: B008
         # optimize_coupling: bool,
     ) -> list["ModeMatchingSolution"]:
         """Optimize the candidate to find mode matching solutions.
@@ -433,9 +435,10 @@ class ModeMatchingCandidate:
         Returns:
             List of optimized mode matching solutions for the candidate.
         """
-        initial_setups = [self.generate_initial_positions(randomize=False)]
+        # TODO make it so that the order of evaluating the candidates does not change their random values
+        initial_setups = [self.generate_initial_positions(randomize=False, rng=rng)]
         for _ in range(random_initial_positions):
-            initial_setups.append(self.generate_initial_positions(randomize=True))
+            initial_setups.append(self.generate_initial_positions(randomize=True, rng=rng))
 
         # TODO unify this with the make_mode_overlap function in analyze.py?
         def objective(positions: np.ndarray) -> float:
@@ -505,7 +508,7 @@ class ModeMatchingCandidate:
 
 
 @dataclass(frozen=True)
-class ModeMatchingSolution:
+class ModeMatchingSolution(YamlSerializableMixin):
     """A solution to a mode matching problem.
 
     Implements :meth:`_repr_png_` to show a plot of the solution setup in IPython environments.
@@ -596,7 +599,7 @@ class ModeMatchingSolution:
 
 
 @dataclass(frozen=True)
-class SolutionList:
+class SolutionList(YamlSerializableMixin):
     """List of mode matching solutions with convenient methods for filtering and sorting.
 
     Supports (array) indexing, iteration, and other list-like operations.
@@ -711,8 +714,9 @@ def mode_match(
         min_elements=min_elements,
         max_elements=max_elements,
         constraints=constraints,
-        rng=np.random.default_rng(random_seed),
     )
+
+    rng = np.random.default_rng(random_seed)
 
     solutions = []
     # TODO parallelize this loop?
@@ -723,6 +727,7 @@ def mode_match(
                 random_initial_positions=random_initial_positions,
                 equal_setup_tol=equal_setup_tol,
                 max_solutions=solutions_per_candidate,
+                rng=rng,
                 # optimize_coupling=optimize_coupling,
             )
         )

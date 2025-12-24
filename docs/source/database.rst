@@ -3,3 +3,4 @@
 
 .. automodule:: corset.database
     :members:
+    :inherited-members:

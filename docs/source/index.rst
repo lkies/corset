@@ -23,5 +23,6 @@ Beam Corset Documentation
    core
    database
    plot
+   serialize
    solver
 

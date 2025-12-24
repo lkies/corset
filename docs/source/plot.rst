@@ -3,3 +3,4 @@
 
 .. automodule:: corset.plot
     :members:
+    :inherited-members:

@@ -17,12 +17,13 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 from .plot import OpticalSetupPlot, fig_to_png, plot_optical_setup
+from .serialize import YamlSerializableMixin
 
 
 # TODO should beam include wavelength or should it be part of the larger setup?
 # TODO refractive index?
 @dataclass(frozen=True)
-class Beam:
+class Beam(YamlSerializableMixin):
     """Paraxial Gaussian beam representation.
 
     Implements :meth:`_repr_png_` to show a plot of the beam radius in IPython environments.
@@ -164,7 +165,7 @@ class Beam:
 
 # TODO general Element class?
 @dataclass(frozen=True)
-class ThinLens:
+class ThinLens(YamlSerializableMixin):
     """Thin lens element including additional information."""
 
     focal_length: float  #: Focal length of the lens
@@ -188,7 +189,7 @@ class ThinLens:
 
 
 @dataclass(frozen=True)
-class ThickLens:
+class ThickLens(YamlSerializableMixin):
     """Thick lens element including additional information.
 
     A positive radius of curvature is a convex surface while a negative radius is concave.
@@ -237,7 +238,7 @@ Lens = ThinLens | ThickLens  #: Lens type union
 
 
 @dataclass(frozen=True)
-class OpticalSetup:
+class OpticalSetup(YamlSerializableMixin):
     """Optical setup described by an initial beam and a sequence of elements.
 
     Implements :meth:`_repr_png_` to show a plot of the optical setup in IPython environments.
