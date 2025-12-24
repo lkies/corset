@@ -10,7 +10,7 @@ The actual constrained optimization is carried out using :func:`scipy.optimize.m
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
 """
 
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import combinations_with_replacement, pairwise
@@ -40,7 +40,7 @@ class ShiftingRange:
     min_elements: int = 0  #: Minimum number of lenses to be placed in this range
     max_elements: int = float("inf")  # pyright: ignore[reportAssignmentType]
     """Maximum number of lenses that can be placed in this range."""
-    selection: list[Lens] = field(default_factory=list)  # TODO name
+    selection: Iterable[Lens] = field(default_factory=list)
     """Optional set of lenses to use for this range, if empty the global selection is used."""
 
     def __post_init__(self):
@@ -603,7 +603,7 @@ class SolutionList:
     Implements :meth:`_repr_html_` to show a :class:`pandas.DataFrame` representation in IPython environments.
     """
 
-    solutions: list[ModeMatchingSolution]  #: List of mode matching solutions
+    solutions: list[ModeMatchingSolution]  #: Underlying list of mode matching solutions
 
     @overload
     def __getitem__(self, index: int) -> "ModeMatchingSolution": ...
@@ -625,7 +625,7 @@ class SolutionList:
 
     @cached_property
     def df(self) -> pd.DataFrame:
-        """DataFrame representation of the solutions for easy analysis."""
+        """DataFrame representation of the solutions for convenient analysis."""
         return pd.DataFrame([sol.analysis.summary() for sol in self.solutions])
 
     def _repr_html_(self) -> str:

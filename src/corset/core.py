@@ -168,8 +168,8 @@ class ThinLens:
     """Thin lens element including additional information."""
 
     focal_length: float  #: Focal length of the lens
-    left_margin: float = 0  #: Physical size to the left of the focal plane
-    right_margin: float = 0  #: Physical size to the right of the focal plane
+    left_margin: float = 0.0  #: Physical size to the left of the focal plane
+    right_margin: float = 0.0  #: Physical size to the right of the focal plane
     name: str | None = None  #: Name for reference and plotting
 
     def __post_init__(self):
@@ -199,8 +199,8 @@ class ThickLens:
     out_roc: float  #: Output surface radius of curvature, positive is convex
     thickness: float  #: Thickness of the lens
     refractive_index: float  #: Refractive index of the lens material
-    left_margin: float = 0  #: Physical size to the left of the lens center
-    right_margin: float = 0  #: Physical size to the right of the lens center
+    left_margin: float = 0.0  #: Physical size to the left of the lens center
+    right_margin: float = 0.0  #: Physical size to the right of the lens center
     name: str | None = None  #: Name for reference and plotting
 
     FLAT: ClassVar[float] = float("inf")  #: Surface radius representing a flat surface

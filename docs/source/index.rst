@@ -21,6 +21,7 @@ Beam Corset Documentation
    analysis
    config
    core
+   database
    plot
    solver
 
