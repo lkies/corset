@@ -6,7 +6,7 @@ import numpy as np
 
 from corset.core import Beam
 
-colors = [
+rainbow = [
     "#cd001a",
     "#ef6a00",
     "#f2cd00",
@@ -14,6 +14,8 @@ colors = [
     "#1961ae",
     "#61007d",
 ]
+corset = ("#1a1a1a", "#e6e6e6")
+lace = ("#cccccc", "#333333")
 
 
 def make_logo(filename, dark, crop=None):
@@ -32,22 +34,22 @@ def make_logo(filename, dark, crop=None):
     # make the beam
     zs = np.linspace(-8, 8, 100)
     rs = beam.radius(zs)
-    fractions = np.linspace(-1, 1, len(colors) + 1) * radius_scale
+    fractions = np.linspace(-1, 1, len(rainbow) + 1) * radius_scale
     half = len(zs) // 2
     eps = -5e-2
-    for c1, c2, lower, upper in zip(colors, colors[::-1], fractions[:-1], fractions[1:], strict=True):
+    for c1, c2, lower, upper in zip(rainbow, rainbow[::-1], fractions[:-1], fractions[1:], strict=True):
         ax.fill_between(zs[:half], rs[:half] * lower - eps, rs[:half] * upper + eps, color=c1, ec="none")
         ax.fill_between(zs[half:], rs[half:] * lower - eps, rs[half:] * upper + eps, color=c2, ec="none")
 
     # make the corset
-    corset_color = (0.9,) * 3 if dark else (0.1,) * 3
+    corset_color = corset[1] if dark else corset[0]
     corset_left, corset_right = -2.5, 2.5
     zs_corset = np.linspace(corset_left, corset_right, 50)
     rs_corset = beam.radius(zs_corset) * radius_scale
     ax.fill_between(zs_corset, -rs_corset, rs_corset, color=corset_color, lw=15)
 
     # make the laces
-    lace_color = (0.2,) * 3 if dark else (0.8,) * 3
+    lace_color = lace[1] if dark else lace[0]
     n_laces = 3
     bounds = np.linspace(corset_left, corset_right, n_laces + 1)
     width = np.diff(bounds)[0] * 0.6
@@ -71,3 +73,11 @@ if __name__ == "__main__":
     make_logo(directory / "logo_dark.svg", dark=True)
     # only show the right expanding part for favicon
     make_logo(directory / "favicon.svg", dark=False, crop=([0, 8], [-4, 4]))
+
+    favicon_svg = (directory / "favicon.svg").read_text()
+    favicon_svg = favicon_svg.replace(corset[0], "var(--corset)").replace(lace[0], "var(--lace)")
+    favicon_svg = favicon_svg.replace(
+        "</style>",
+        f"\n:root {{ --corset: {corset[0]}; --lace: {lace[0]}; }}\n@media (prefers-color-scheme: dark) {{ :root {{ --corset: {corset[1]}; --lace: {lace[1]}; }} }}\n</style>",
+    )
+    (directory / "favicon.svg").write_text(favicon_svg)
