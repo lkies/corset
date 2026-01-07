@@ -281,8 +281,9 @@ class ModeMatchingAnalysis:
         """Create a summary dictionary of the analysis results
 
         Args:
-            sensitivity_unit: The unit to use for sensitivities in the summary. If `None` the default from
-                :class:`Config` is used. If `False`, the raw sensitivities without unit conversion are used.
+            sensitivity_unit: The unit to use for sensitivities in the summary.
+                If `False`, the raw sensitivities without unit conversion are used.
+                If `None` this defaults to :attr:`Config.sensitivity_unit <corset.config.Config.sensitivity_unit>`.
 
         Returns:
             A dictionary containing the summary data. The keys are:

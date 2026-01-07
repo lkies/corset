@@ -92,15 +92,16 @@ def get_handles(ax: Axes) -> list[tuple[str, Any]]:
 
 
 # TODO refactor this function to reduce complexity
-def plot_optical_setup(  # noqa: C901
+def plot_setup(  # noqa: C901
     self: "OpticalSetup",
     *,
     ax: Axes | None = None,
-    legend: bool = False,
+    show_legend: bool | None = None,
     points: int | np.ndarray | None = None,
     limits: tuple[float, float] | None = None,
-    beam_kwargs: dict = {"color": "C0", "alpha": 0.5},  # noqa: B006
-    confidence_interval: float | None = 0.95,
+    beam_kwargs: dict | None = None,
+    confidence_interval: float | bool | None = None,
+    rayleigh_range_cap: float | None = None,
     free_lenses: list[int] = [],  # noqa: B006
     # TODO add back other configuration options?
 ) -> OpticalSetupPlot:
@@ -108,12 +109,20 @@ def plot_optical_setup(  # noqa: C901
 
     Args:
         self: The optical setup instance.
-        legend: Whether to show a legend for the plot.
+        show_legend: Whether to show a legend for the plot.
+            If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
         ax: The axes to plot on. If `None`, the current axes are used.
-        points: Number of points or specific z-coordinates to evaluate the beam profile. If `None`, 500 points are used.
-        limits: Z-coordinate limits for the plot. If `None`, limits are determined from the beam and elements.
+        points: Number of points or specific z-coordinates to evaluate the beam profile.
+            If `None`, this defaults to :attr:`Config.PlotSetup.beam_points <corset.config.Config.PlotSetup.beam_points>`.
+        limits: Z-coordinate limits for the plot.
+            If `None`, limits are determined from the beam and elements.
         beam_kwargs: Additional keyword arguments passed to the beam plot.
-        confidence_interval: Confidence interval probability for beam uncertainty visualization. If `None`, no uncertainty is plotted.
+            If `None` this defaults to :attr:`Config.PlotSetup.beam_kwargs <corset.config.Config.PlotSetup.beam_kwargs>`.
+        confidence_interval: Confidence interval probability for beam uncertainty visualization.
+            If `False`, no uncertainty is plotted.
+            If `None` this defaults to :attr:`Config.PlotSetup.confidence_interval <corset.config.Config.PlotSetup.confidence_interval>`.
+        rayleigh_range_cap: Maximum Rayleigh range to consider when determining plot limits.
+            If `None` this defaults to :attr:`Config.PlotSetup.rayleigh_range_cap <corset.config.Config.PlotSetup.rayleigh_range_cap>`.
         free_lenses: Indices of lenses to treat as free elements in the plot.
 
     Returns:
@@ -121,6 +130,12 @@ def plot_optical_setup(  # noqa: C901
     """
 
     ax = ax or plt.gca()
+    show_legend = Config.get(show_legend, Config.PlotSetup.show_legend)
+    beam_kwargs = Config.get(beam_kwargs, Config.PlotSetup.beam_kwargs)
+    if confidence_interval is True:
+        raise ValueError("confidence_interval cannot be True, must be a float between 0 and 1 or False")
+    confidence_interval = Config.get(confidence_interval, Config.PlotSetup.confidence_interval)
+    rayleigh_range_cap = Config.get(rayleigh_range_cap, Config.PlotSetup.rayleigh_range_cap)
 
     lens_positions = [pos for pos, _ in self.elements]
 
@@ -128,7 +143,7 @@ def plot_optical_setup(  # noqa: C901
         zs = points
     else:
         if not limits:
-            cap = Config.plot_max_rayleigh_range
+            cap = rayleigh_range_cap
             all_bounds = [
                 self.beams[0].focus - min(cap, self.beams[0].rayleigh_range),
                 self.beams[-1].focus + min(cap, self.beams[-1].rayleigh_range),
@@ -141,7 +156,7 @@ def plot_optical_setup(  # noqa: C901
 
             limits = (min(all_bounds), max(all_bounds))
 
-        num_points = points if isinstance(points, int) else 500
+        num_points = points if isinstance(points, int) else Config.PlotSetup.beam_points
         zs = np.linspace(limits[0], limits[1], num_points)
 
     handles = get_handles(ax)
@@ -153,7 +168,7 @@ def plot_optical_setup(  # noqa: C901
     r_max = np.max(rs)
 
     beam_deviation = []
-    if confidence_interval is not None and self.beams[0].gauss_cov is not None:
+    if confidence_interval is not False and self.beams[0].gauss_cov is not None:
         rs_ci = self.radius_dev(zs) * stats.norm.interval(confidence_interval)[1]
         ci_color = beam_kwargs.get("color")
         if ci_color is None or ci_color == "none":
@@ -227,7 +242,7 @@ def plot_optical_setup(  # noqa: C901
     ax.set_ylabel(r"w(z) in $\mathrm{\mu m}$")
     ax.yaxis.set_major_formatter(micro_formatter)
 
-    if legend:
+    if show_legend:
         ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc="lower left").set_zorder(1000)
 
     return OpticalSetupPlot(
@@ -243,14 +258,15 @@ def plot_optical_setup(  # noqa: C901
 
 
 def plot_mode_match_solution_setup(
-    self: "ModeMatchingSolution", *, ax: Axes | None = None, legend: bool = False
+    self: "ModeMatchingSolution", *, ax: Axes | None = None, show_legend: bool | None = None
 ) -> ModeMatchingPlot:
     """Plot the mode matching solution setup including the desired beam and constraints.
 
     Args:
         self: The mode matching solution instance.
         ax: The axes to plot on. If `None`, the current axes are used.
-        legend: Whether to show a legend for the plot.
+        show_legend: Whether to show a legend for the plot.
+            If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
     Returns:
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
@@ -258,17 +274,18 @@ def plot_mode_match_solution_setup(
     from .solver import Aperture, Passage
 
     ax = ax or plt.gca()
+    show_legend = Config.get(show_legend, Config.PlotSetup.show_legend)
 
     problem = self.candidate.problem
 
-    setup_plot = plot_optical_setup(
-        self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements, legend=legend
+    setup_plot = plot_setup(
+        self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements, show_legend=show_legend
     )
-    desired_plot = plot_optical_setup(
+    desired_plot = plot_setup(
         OpticalSetup(problem.desired_beam, []),
         ax=ax,
         beam_kwargs={"color": "C1", "label": "Desired Beam"},
-        legend=legend,
+        show_legend=show_legend,
     )
 
     ranges = []
@@ -339,13 +356,14 @@ class SensitivityPlot:
 def plot_reachability(
     self: "ModeMatchingSolution",
     *,
-    displacement: float | list[float] = 5e-3,
-    num_samples: int | list[int] = 7,
-    grid_step: int | list[int] = 2,
+    displacement: float | list[float] | None = None,
+    num_samples: int | list[int] | None = None,
+    line_step: int | list[int] | None = None,
     dimensions: list[int] | None = None,
     focus_range: tuple[float, float] | None = None,
     waist_range: tuple[float, float] | None = None,
-    confidence_interval: float | None = 0.95,
+    confidence_interval: float | None = None,
+    grid_resolution: int | None = None,
     ax: Axes | None = None,
 ) -> ReachabilityPlot:
     """Plot a reachability analysis of the mode matching solution.
@@ -353,11 +371,18 @@ def plot_reachability(
     Args:
         self: The mode matching solution instance.
         displacement: Maximum displacement from the optimal position(s) in meters.
+            If `None`, this defaults to :attr:`Config.PlotReachability.displacement <corset.config.Config.PlotReachability.displacement>`.
         num_samples: Number of samples to take along each dimension.
-        grid_step: Step size to skip certain lines for increased smoothness while retaining clarity.
+            If `None`, this defaults to :attr:`Config.PlotReachability.num_samples <corset.config.Config.PlotReachability.num_samples>`.
+        line_step: Step size to skip certain lines for increased smoothness while retaining clarity.
+            If `None`, this defaults to :attr:`Config.PlotReachability.line_step <corset.config.Config.PlotReachability.line_step>`.
         dimensions: Indices of the dimensions to analyze. If `None`, all dimensions are used.
         focus_range: Range of focus values to display on the x-axis. If `None`, determined automatically.
         waist_range: Range of waist values to display on the y-axis. If `None`, determined automatically.
+        confidence_interval: Confidence ellipse probability for focus position and waist radius.
+            If `None`, this defaults to :attr:`Config.PlotReachability.confidence_interval <corset.config.Config.PlotReachability.confidence_interval>`.
+        grid_resolution: Resolution of the grid for the background mode overlap contour plot.
+            If `None`, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
         ax: The axes to plot on. If `None`, the current axes are used.
 
     Returns:
@@ -368,13 +393,19 @@ def plot_reachability(
     from .solver import mode_overlap
 
     ax = ax or plt.gca()
+    displacement = Config.get(displacement, Config.PlotReachability.displacement)
+    num_samples = Config.get(num_samples, Config.PlotReachability.num_samples)
+    line_step = Config.get(line_step, Config.PlotReachability.line_step)
+    confidence_interval = Config.get(confidence_interval, Config.PlotReachability.confidence_interval)
+    grid_resolution = Config.get(grid_resolution, Config.Overlap.grid_resolution)
+
     if dimensions is None:
         dimensions = list(range(len(self.positions)))
 
     num_dof = len(dimensions)
     displacement = cast(list, [displacement] * num_dof if np.isscalar(displacement) else displacement)
     num_samples = cast(list, [num_samples] * num_dof if np.isscalar(num_samples) else num_samples)
-    grid_step = cast(list, [grid_step] * num_dof if np.isscalar(grid_step) else grid_step)
+    line_step = cast(list, [line_step] * num_dof if np.isscalar(line_step) else line_step)
 
     linspaces = [
         np.linspace(-d, d, num=n) + offset
@@ -400,7 +431,7 @@ def plot_reachability(
     contrast_color = plt.rcParams["text.color"]
     center = ax.scatter(0, self.candidate.problem.desired_beam.waist, color=contrast_color, marker="o", zorder=100)
     center_ci = None
-    if confidence_interval is not None and self.setup.beams[-1].gauss_cov is not None:
+    if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
         # plot the confidence ellipse around the optimal point
         eigenvalues, eigenvectors = np.linalg.eigh(self.setup.beams[-1].gauss_cov)
         theta = np.linspace(0, 2 * np.pi, 100)
@@ -416,8 +447,8 @@ def plot_reachability(
 
     lines: list[list[Line2D]] = []
     for i, (dim, disp) in enumerate(zip(dimensions, displacement, strict=True)):
-        focuses_flat = select_lines(delta_focuses, i, grid_step)  # pyright: ignore[reportArgumentType]
-        waists_flat = select_lines(waists, i, grid_step)  # pyright: ignore[reportArgumentType]
+        focuses_flat = select_lines(delta_focuses, i, line_step)  # pyright: ignore[reportArgumentType]
+        waists_flat = select_lines(waists, i, line_step)  # pyright: ignore[reportArgumentType]
         lines.append([])
         for focus, waist in zip(focuses_flat, waists_flat, strict=True):
             line = ax.plot(focus, waist, color=f"C{dim}", label=rf"$\Delta x_{i}$ ($\pm{disp*1e3:.1f}$ mm)")[0]
@@ -431,8 +462,9 @@ def plot_reachability(
 
     ax.legend(handles=[line[0] for line in lines], loc="lower left").set_zorder(1000)
 
-    grid_n = 50
-    focuses_grid, waists_grid = np.meshgrid(np.linspace(*ax.get_xlim(), grid_n), np.linspace(*ax.get_ylim(), grid_n))
+    focuses_grid, waists_grid = np.meshgrid(
+        np.linspace(*ax.get_xlim(), grid_resolution), np.linspace(*ax.get_ylim(), grid_resolution)
+    )
     overlap = mode_overlap(
         focuses_grid,  # pyright: ignore[reportArgumentType]
         self.candidate.problem.desired_beam.waist,
@@ -440,8 +472,8 @@ def plot_reachability(
         self.candidate.problem.setup.initial_beam.wavelength,
     )
 
-    levels = Config.overlap_levels
-    colors = Config.overlap_colors()
+    levels = Config.Overlap.levels
+    colors = Config.Overlap.colors()
     res = ax.contourf(focuses_grid, waists_grid, overlap * 100, levels=levels, colors=colors, alpha=0.5)
     cb = ax.figure.colorbar(res, label="Mode overlap (%)")
 
@@ -462,12 +494,13 @@ def plot_sensitivity(
     self: "ModeMatchingSolution",
     *,
     dimensions: tuple[int, int] | tuple[int, int, int] | None = None,
-    worst_overlap: float = 0.98,
-    x_range: tuple[float, float] | None = None,
-    y_range: tuple[float, float] | None = None,
-    z_range: tuple[float, float] | None = None,
-    z_n: int = 3,  # more is too cluttered most times
-    force_contours: bool = False,
+    worst_overlap: float | None = None,
+    x_displacement: float | None = None,
+    y_displacement: float | None = None,
+    z_displacement: float | None = None,
+    num_samples_z: int | None = None,
+    force_contour_lines: bool | None = None,
+    grid_resolution: int | None = None,
     ax: Axes | None = None,
 ) -> SensitivityPlot:
     """Plot a sensitivity analysis of the mode matching solution.
@@ -477,12 +510,18 @@ def plot_sensitivity(
         dimensions: Indices of the dimensions to analyze. If `None`, the two least
             coupled dimensions are used as the x and y dimensions, and the remaining most sensitive
             dimension is used as the auxiliary z dimension if applicable.
-        worst_overlap: Worst-case mode overlap contour line that should still be fully visible in the plot.
-        x_range: Range of x-axis values to display. If `None`, determined automatically from worst_overlap.
-        y_range: Range of y-axis values to display. If `None`, determined automatically from worst_overlap.
-        z_range: Range of z-axis values to display. If `None`, determined automatically from worst_overlap.
-        z_n: Number of z-slices to plot if 3 dimensions are used.
-        force_contours: If `True`, always use contour lines instead of filled contours for plots with two degrees of freedom.
+        worst_overlap: Worst-case mode overlap contour line that should still be fully visible in the
+            plot used for automatic range determination.
+            If `None`, this defaults to :attr:`Config.PlotSensitivity.worst_overlap <corset.config.Config.PlotSensitivity.worst_overlap>`.
+        x_displacement: Displacement magnitude for x-axis values. If `None`, determined automatically from worst_overlap.
+        y_displacement: Displacement magnitude for y-axis values. If `None`, determined automatically from worst_overlap.
+        z_displacement: Displacement magnitude for z-axis values. If `None`, determined automatically from worst_overlap.
+        num_samples_z: Number of z-slices to plot if 3 dimensions are used.
+            If `None`, this defaults to :attr:`Config.PlotSensitivity.num_samples_z <corset.config.Config.PlotSensitivity.num_samples_z>`.
+        force_contour_lines: If `True`, always use contour lines instead of filled contours for plots with two
+            degrees of freedom. If `None`, this defaults to :attr:`Config.PlotSensitivity.force_contour_lines <corset.config.Config.PlotSensitivity.force_contour_lines>`.
+        grid_resolution: Resolution of the grid for the contour plots.
+            If `None`, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
         ax: The axes to plot on. If `None`, the current axes are used.
 
     Returns:
@@ -491,6 +530,10 @@ def plot_sensitivity(
 
     from .analysis import make_mode_overlap, vector_partial
 
+    worst_overlap = Config.get(worst_overlap, Config.PlotSensitivity.worst_overlap)
+    num_samples_z = Config.get(num_samples_z, Config.PlotSensitivity.num_samples_z)
+    force_contour_lines = Config.get(force_contour_lines, Config.PlotSensitivity.force_contour_lines)
+    grid_resolution = Config.get(grid_resolution, Config.Overlap.grid_resolution)
     ax = ax or plt.gca()
 
     if dimensions is None:
@@ -509,24 +552,19 @@ def plot_sensitivity(
     # the hessian will always be badly conditioned for ndim > 2, so only use the subspace we care about
     # which should be well conditioned
     A_xy_inv = np.linalg.inv(-self.analysis.hessian[np.ix_(dimensions[:2], dimensions[:2])] / 2)  # noqa: N806
-    if x_range is None:
-        abs_max_range_x = np.sqrt(A_xy_inv[0, 0] * (1 - worst_overlap))
-        x_range = (-abs_max_range_x * 1.1, abs_max_range_x * 1.1)
-    if y_range is None:
-        abs_max_range_y = np.sqrt(A_xy_inv[1, 1] * (1 - worst_overlap))
-        y_range = (-abs_max_range_y * 1.1, abs_max_range_y * 1.1)
+    # use Config.get so the type checker knows the displacements are not None after this point
+    x_displacement = Config.get(x_displacement, np.sqrt(A_xy_inv[0, 0] * (1 - worst_overlap)) * 1.1)
+    y_displacement = Config.get(y_displacement, np.sqrt(A_xy_inv[1, 1] * (1 - worst_overlap)) * 1.1)
 
-    if len(dimensions) > 2:
+    if z_displacement is None and len(dimensions) > 2:
         A_xyz = -self.analysis.hessian[np.ix_(dimensions, dimensions)]  # noqa: N806
         eigs = np.linalg.eigh(A_xyz)
         v_min = eigs.eigenvectors[:, np.argmin(eigs.eigenvalues)]
-        abs_max_range_z = min(abs(v_min[2] / v_min[0] * abs_max_range_x), abs(v_min[2] / v_min[1] * abs_max_range_y))
-        z_range = (-abs_max_range_z, abs_max_range_z)
+        z_displacement = min(abs(v_min[2] / v_min[0] * x_displacement), abs(v_min[2] / v_min[1] * y_displacement)) / 1.1
 
-    grid_n = 50
     base = np.array([self.positions[dim] for dim in dimensions])
-    xs = np.linspace(*x_range, grid_n)
-    ys = np.linspace(*y_range, grid_n)
+    xs = np.linspace(-x_displacement, x_displacement, grid_resolution)
+    ys = np.linspace(-y_displacement, y_displacement, grid_resolution)
     xsg, ysg = np.meshgrid(xs, ys)
     cmap = plt.get_cmap("coolwarm") if Config.mpl_is_dark() else plt.get_cmap("berlin")
 
@@ -536,26 +574,27 @@ def plot_sensitivity(
 
     if len(dimensions) == 2:
         overlaps = mode_overlap(np.stack([xsg, ysg], axis=-1) + base)
-        if force_contours:
-            cont = ax.contour(xsg, ysg, overlaps * 100, levels=Config.overlap_levels, colors=cmap(0.5))
+        if force_contour_lines:
+            cont = ax.contour(xsg, ysg, overlaps * 100, levels=Config.Overlap.levels, colors=cmap(0.5))
             ax.clabel(cont, fmt="%1.1f%%")
             contours.append(cont)
         else:
-            cont = ax.contourf(xsg, ysg, overlaps * 100, levels=Config.overlap_levels, colors=Config.overlap_colors())
+            cont = ax.contourf(xsg, ysg, overlaps * 100, levels=Config.Overlap.levels, colors=Config.Overlap.colors())
             colorbar = ax.figure.colorbar(cont, label="Mode overlap (%)")
             contours.append(cont)
     else:
-        z_colors = cmap(np.linspace(0, 1, z_n))
-        zs = np.linspace(*z_range, z_n)  # pyright: ignore[reportCallIssue]
+        z_displacement = cast(float, z_displacement)  # make type checker happy
+        z_colors = cmap(np.linspace(0, 1, num_samples_z))
+        zs = np.linspace(-z_displacement, z_displacement, num_samples_z)
         for i, (color, z) in enumerate(zip(z_colors, zs, strict=True)):
             positions = np.stack([xsg, ysg, z * np.ones_like(xsg)], axis=-1) + base
             overlaps = mode_overlap(positions)
-            zorder = 100 if i == z_n // 2 else 10
+            zorder = 100 if i == num_samples_z // 2 else 10
             cont = ax.contour(
-                xsg, ysg, overlaps * 100, levels=Config.overlap_levels, colors=[color], alpha=0.7, zorder=zorder
+                xsg, ysg, overlaps * 100, levels=Config.Overlap.levels, colors=[color], alpha=0.7, zorder=zorder
             )
             contours.append(cont)
-            if i == z_n // 2:
+            if i == num_samples_z // 2:
                 ax.clabel(cont, fmt="%1.1f%%", colors=[color])
         handles = [
             Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value*1e3:.1f}$ mm")
@@ -580,26 +619,45 @@ def plot_sensitivity(
 def plot_mode_match_solution_all(
     self: "ModeMatchingSolution",
     *,
-    plot_kwargs: dict = {},  # noqa: B006
-    reachability_kwargs: dict = {},  # noqa: B006
-    sensitivity_kwargs: dict = {},  # noqa: B006
+    figsize: tuple[float, float] | None = None,
+    width_ratios: tuple[float, float, float] | None = None,
+    tight_layout: bool | None = None,
+    setup_kwargs: dict | None = None,
+    reachability_kwargs: dict | None = None,
+    sensitivity_kwargs: dict | None = None,
 ) -> tuple[Figure, tuple[ModeMatchingPlot, ReachabilityPlot, SensitivityPlot]]:
     """Plot the mode matching solution setup, reachability analysis, and sensitivity analysis in a single figure.
 
     Args:
         self: The mode matching solution instance.
-        plot_kwargs: Additional keyword arguments for the mode matching plot.
+        figsize: Figure size for the combined plot.
+            If `None`, this defaults to :attr:`Config.PlotAll.figsize <corset.config.Config.PlotAll.figsize>`.
+        width_ratios: Width ratios for the three subplots.
+            If `None`, this defaults to :attr:`Config.PlotAll.width_ratios <corset.config.Config.PlotAll.width_ratios>`.
+        tight_layout: Whether to use tight layout for the figure.
+            If `None`, this defaults to :attr:`Config.PlotAll.tight_layout <corset.config.Config.PlotAll.tight_layout>`.
+        setup_kwargs: Additional keyword arguments for the setup plot.
+            If `None`, this defaults to :attr:`Config.PlotAll.setup_kwargs <corset.config.Config.PlotAll.setup_kwargs>`.
         reachability_kwargs: Additional keyword arguments for the reachability plot.
+            If `None`, this defaults to :attr:`Config.PlotAll.reachability_kwargs <corset.config.Config.PlotAll.reachability_kwargs>`.
         sensitivity_kwargs: Additional keyword arguments for the sensitivity plot.
+            If `None`, this defaults to :attr:`Config.PlotAll.sensitivity_kwargs <corset.config.Config.PlotAll.sensitivity_kwargs>`.
 
     Returns:
         A tuple containing the figure and an inner tuple with the three plot objects.
     """
 
+    figsize = Config.get(figsize, Config.PlotAll.figsize)
+    width_ratios = Config.get(width_ratios, Config.PlotAll.width_ratios)
+    tight_layout = Config.get(tight_layout, Config.PlotAll.tight_layout)
+    setup_kwargs = Config.get(setup_kwargs, Config.PlotAll.setup_kwargs)
+    reachability_kwargs = Config.get(reachability_kwargs, Config.PlotAll.reachability_kwargs)
+    sensitivity_kwargs = Config.get(sensitivity_kwargs, Config.PlotAll.sensitivity_kwargs)
+
     fig, (axl, axr, axc) = plt.subplots(
-        1, 3, figsize=(16, 4), gridspec_kw={"width_ratios": [2, 1, 1]}, tight_layout=True
+        1, 3, figsize=figsize, gridspec_kw={"width_ratios": width_ratios}, tight_layout=tight_layout
     )
-    sol_plot = self.plot_setup(ax=axl, **plot_kwargs)
+    sol_plot = self.plot_setup(ax=axl, **setup_kwargs)
     reach_plot = self.plot_reachability(ax=axr, **reachability_kwargs)
     sens_plot = self.plot_sensitivity(ax=axc, **sensitivity_kwargs)
     return fig, (sol_plot, reach_plot, sens_plot)

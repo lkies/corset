@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
-from .plot import OpticalSetupPlot, fig_to_png, plot_optical_setup
+from .plot import OpticalSetupPlot, fig_to_png, plot_setup
 from .serialize import YamlSerializableMixin
 
 
@@ -322,7 +322,7 @@ class OpticalSetup(YamlSerializableMixin):
         index = np.searchsorted([pos for pos, _ in self.elements], z)
         return self.beams[index].radius_dev(z)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
-    plot = plot_optical_setup  #: Plot the optical setup, see :func:`corset.plot.plot_optical_setup`
+    plot = plot_setup  #: Plot the optical setup, see :func:`corset.plot.plot_setup`
 
     # TODO cache this (and the other repr png functions)?
     def _repr_png_(self) -> bytes:
