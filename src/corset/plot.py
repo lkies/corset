@@ -265,7 +265,7 @@ class SensitivityPlot:
 
 
 def plot_reachability(
-    self: ModeMatchingSolution,
+    self: "ModeMatchingSolution",
     *,
     displacement: float | list[float] = 5e-3,
     num_samples: int | list[int] = 7,
