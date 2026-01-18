@@ -16,7 +16,7 @@ from matplotlib.collections import (
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.text import Annotation
 from matplotlib.ticker import FuncFormatter
 from scipy import stats
@@ -337,7 +337,7 @@ class ReachabilityPlot:
 
     ax: Axes  #: Axes containing the plot
     center: PathCollection  #: Point representing the optimal focus and waist
-    center_ci: Line2D | None  #: Uncertainty of the arriving beam around the optimal point
+    center_ci: Ellipse | None  #: Uncertainty of the arriving beam around the optimal point
     lines: list[list[Line2D]]  #: Lines representing parameter variations
     contour: Any  #: Contour plot of the mode overlap
     colorbar: Colorbar | None  #: Colorbar for the contour plot
@@ -434,11 +434,13 @@ def plot_reachability(
     if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
         # plot the confidence ellipse around the optimal point
         eigenvalues, eigenvectors = np.linalg.eigh(self.setup.beams[-1].gauss_cov)
-        theta = np.linspace(0, 2 * np.pi, 100)
-        scales = (np.sqrt(eigenvalues) * stats.norm.interval(confidence_interval)[1])[:, np.newaxis]
-        offset = np.array([[0], [self.candidate.problem.desired_beam.waist]])
-        ellipse = offset + eigenvectors @ (np.array([np.cos(theta), np.sin(theta)]) * scales)
-        center_ci = ax.plot(*ellipse, ls="--", color=contrast_color, zorder=100)[0]
+        angle = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
+        diameters = 2 * np.sqrt(eigenvalues) * stats.chi2.ppf(confidence_interval, df=2) ** 0.5
+        desired_waist = self.candidate.problem.desired_beam.waist
+        center_ci = Ellipse(
+            (0, desired_waist), *diameters, angle=angle, fill=False, ls="--", color=contrast_color, zorder=100
+        )
+        ax.add_patch(center_ci)
 
     def select_lines(arr: np.ndarray, dim: int, steps: list[int]) -> np.ndarray:
         steps = [step if i != dim else 1 for i, step in enumerate(steps)]
