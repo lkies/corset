@@ -590,8 +590,6 @@ class ModeMatchingSolution(YamlSerializableMixin):
             ValueError: If there are not enough free parameters or if the solution does not have ~100% mode overlap.
         """
 
-        from . import analysis
-
         if not len(self.positions) > 2:
             return None
             # raise ValueError("Need at least 3 free parameters to optimize coupling.")

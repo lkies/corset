@@ -7,6 +7,8 @@ a complex beam parameter combined with an axial offset and wavelength. The beams
 using the ray transfer matrix method for Gaussian beams, see `here <https://en.wikipedia.org/wiki/Ray_transfer_matrix_analysis#Gaussian_beams>`_.
 """
 
+import warnings
+from collections.abc import Sequence
 from dataclasses import InitVar, dataclass
 from functools import cached_property
 from itertools import pairwise
@@ -125,7 +127,7 @@ class Beam(YamlSerializableMixin):
     ) -> "Beam":
         """Fit a Gaussian beam radius to measured data.
 
-        This uses scipy.optimize.curve_fit to estimate the focus position
+        This uses :func:`scipy.optimize.curve_fit` to estimate the focus position
         and waist given arrays of axial `positions` and measured `radii`.
 
         Args:
@@ -321,6 +323,74 @@ class OpticalSetup(YamlSerializableMixin):
             return np.array([self.radius_dev(zi) for zi in z])  # pyright: ignore[reportGeneralTypeIssues]
         index = np.searchsorted([pos for pos, _ in self.elements], z)
         return self.beams[index].radius_dev(z)  # pyright: ignore[reportArgumentType, reportCallIssue]
+
+    @classmethod
+    def fit(
+        cls,
+        positions: np.ndarray,
+        radii: np.ndarray,
+        wavelength: float,
+        elements: Sequence[tuple[float | tuple[float, float], Lens]],
+        p0: tuple[float, float] | None = None,
+    ) -> "OpticalSetup":
+        """Fit an optical setup to measured data.
+
+        Args:
+            positions: Axial positions where radii were measured.
+            radii: Measured beam radii corresponding to the positions.
+            wavelength: Wavelength used to relate waist and Rayleigh range.
+            elements: Optical elements as (position, element) tuples sorted by position.
+                positions can be specified as float to describe a fixed position or as
+                (expected, deviation) tuple to fit the element position between
+                expected - deviation and expected + deviation.
+            p0: Initial guess for (focus, waist). If omitted a simple heuristic is used.
+
+        Returns:
+            OpticalSetup instance fitted to the data.
+
+        Raises:
+            ValueError: If the initial guess for element positions are not in ascending order.
+            ValueError: If the fitted element positions are invalid, i.e. not in ascending order.
+            ValueError: If no data point is before the first element when using beam parameter initial guess heuristic.
+        """
+        fit_indices = [i for i, (pos, _) in enumerate(elements) if isinstance(pos, tuple)]
+
+        def substitute_positions(elem_positions: Sequence[float]) -> list[tuple[float, Lens]]:
+            substituted = list(elements)  # make a copy of potential non list sequence
+            for idx, pos in zip(fit_indices, elem_positions, strict=True):
+                substituted[idx] = (pos, substituted[idx][1])
+            return substituted  # pyright: ignore[reportReturnType]
+
+        def model(positions: np.ndarray, focus: float, waist: float, *elem_positions: float) -> np.ndarray:
+            setup = cls(Beam.from_gauss(focus, waist, wavelength), substitute_positions(elem_positions), validate=False)
+            return setup.radius(positions)  # pyright: ignore[reportReturnType]
+
+        beam_guess = list(p0 if p0 is not None else (positions[np.argmin(radii)], np.min(radii)))
+        initial_guess = beam_guess + [pos[0] for pos, _ in elements if isinstance(pos, tuple)]
+
+        if not all(left < right for left, right in pairwise(initial_guess[2:])):
+            raise ValueError("Initial guess for element positions must be in ascending order.")
+        if p0 is None and np.all(positions >= initial_guess[2]):
+            raise ValueError("At least one data point must be before the first element for initial guess heuristic.")
+
+        element_bounds = [(pos[0] - pos[1], pos[0] + pos[1]) for pos, _ in elements if isinstance(pos, tuple)]
+        bounds = np.transpose([(-np.inf, np.inf)] * 2 + element_bounds)
+        params, cov = curve_fit(model, positions, radii, p0=initial_guess, bounds=bounds)
+        focus, waist, *fitted_positions = params
+
+        # warn if fitted positions are at bounds since this indicates a bad fit or too tight bounds
+        for i, pos, (lower, upper) in zip(fit_indices, fitted_positions, element_bounds, strict=True):
+            if abs(pos - lower) < 1e-6:
+                warnings.warn(f"Fitted position of element {i} is at lower bound {lower}.", stacklevel=2)
+            if abs(pos - upper) < 1e-6:
+                warnings.warn(f"Fitted position of element {i} is at upper bound {upper}.", stacklevel=2)
+
+        beam = Beam.from_gauss(focus, waist, wavelength, cov=cov[:2, :2])
+        try:
+            setup = cls(initial_beam=beam, elements=substitute_positions(fitted_positions))
+        except ValueError as e:
+            raise ValueError("Invalid fit result: optical elements are not sorted by position.") from e
+        return setup
 
     plot = plot_setup  #: Plot the optical setup, see :func:`corset.plot.plot_setup`
 
