@@ -62,51 +62,6 @@ def vector_partial(
     return wrapped
 
 
-def make_mode_overlap(solution: "ModeMatchingSolution") -> Callable[[np.ndarray], float]:
-    """Create a function that computes the mode overlap as the function of the free element positions.
-
-    Args:
-        solution: The mode matching solution to base the overlap function on.
-
-    Returns:
-        A function that takes an array of element positions and returns the mode overlap.
-    """
-    from . import core, solver
-
-    def overlap(positions: np.ndarray) -> float:
-        setup = solution.candidate.parametrized_setup.substitute(positions, validate=False)
-        final_beam = core.Beam(
-            setup.beam_parameters[-1], z_offset=setup.elements[-1][0], wavelength=setup.initial_beam.wavelength
-        )
-        problem = solution.candidate.problem
-        return solver.mode_overlap(
-            final_beam.focus - problem.desired_beam.focus,
-            final_beam.waist,
-            problem.desired_beam.waist,
-            problem.setup.initial_beam.wavelength,
-        )
-
-    return overlap
-
-
-def make_focus_and_waist(solution: "ModeMatchingSolution") -> Callable[[np.ndarray], np.ndarray]:
-    """Create a function that computes the focus and waist of the final beam as a function of the free element positions.
-
-    Args:
-        solution: The mode matching solution to base the focus and waist function on.
-
-    Returns:
-        A function that takes an array of element positions and returns the focus and waist.
-    """
-
-    def focus_and_waist(positions: np.ndarray) -> np.ndarray:
-        setup = solution.candidate.parametrized_setup.substitute(positions, validate=False)
-        final_beam = setup.beams_fast[-1]
-        return np.array([final_beam.focus, final_beam.waist])
-
-    return focus_and_waist
-
-
 @dataclass(frozen=True)
 class ModeMatchingAnalysis:
     """Analysis of a mode matching solution providing various sensitivity metrics."""
@@ -127,7 +82,9 @@ class ModeMatchingAnalysis:
         very bad conditioning.
         """
 
-        mode_overlap = wrap_for_differentiate(make_mode_overlap(self.solution))  # pyright: ignore[reportArgumentType]
+        mode_overlap = wrap_for_differentiate(
+            self.solution.candidate.parametrized_overlap  # pyright: ignore[reportArgumentType]
+        )
 
         # the default initial step is 0.5 which would lead to invalid lens position
         # 1e-2 ensures, that only physical configurations are evaluated
@@ -148,7 +105,8 @@ class ModeMatchingAnalysis:
             j_{ij} = \left.\frac{\partial f_{fw,i}(\mathbf{x})}{\partial x_j} \right|_{\mathbf{x} = \mathbf{x}^*}
 
         """
-        waist_and_focus = wrap_for_differentiate(make_focus_and_waist(self.solution))
+        # waist_and_focus = wrap_for_differentiate(make_focus_and_waist(self.solution))
+        waist_and_focus = wrap_for_differentiate(self.solution.candidate.parametrized_focus_and_waist)
         jac_res = jacobian(waist_and_focus, self.solution.positions, initial_step=1e-2)
         if np.any(jac_res.status != 0):
             warnings.warn(f"Jacobian calculation did not converge: {jac_res.status}", stacklevel=2)

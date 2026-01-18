@@ -389,7 +389,7 @@ def plot_reachability(
         A :class:`ReachabilityPlot` containing references to the plot elements.
     """
 
-    from .analysis import make_focus_and_waist, vector_partial
+    from .analysis import vector_partial
     from .solver import mode_overlap
 
     ax = ax or plt.gca()
@@ -421,7 +421,7 @@ def plot_reachability(
         ax.set_ylim(waist_range)
 
     focus_and_waist = np.vectorize(
-        vector_partial(make_focus_and_waist(self), self.positions, dimensions), signature="(n)->(2)"
+        vector_partial(self.candidate.parametrized_focus_and_waist, self.positions, dimensions), signature="(n)->(2)"
     )
 
     grids = np.moveaxis(np.meshgrid(*linspaces, indexing="ij"), 0, -1)  # pyright: ignore[reportArgumentType]
@@ -528,7 +528,7 @@ def plot_sensitivity(
         A :class:`SensitivityPlot` containing references to the plot elements.
     """
 
-    from .analysis import make_mode_overlap, vector_partial
+    from .analysis import vector_partial
 
     worst_overlap = Config.get(worst_overlap, Config.PlotSensitivity.worst_overlap)
     num_samples_z = Config.get(num_samples_z, Config.PlotSensitivity.num_samples_z)
@@ -545,7 +545,9 @@ def plot_sensitivity(
             dimensions = (*dimensions, most_sensitive)
 
     mode_overlap = np.vectorize(
-        vector_partial(make_mode_overlap(self), self.positions, dimensions),  # pyright: ignore[reportArgumentType]
+        vector_partial(
+            self.candidate.parametrized_overlap, self.positions, dimensions  # pyright: ignore[reportArgumentType]
+        ),
         signature="(n)->()",
     )
 

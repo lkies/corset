@@ -415,6 +415,39 @@ class ModeMatchingCandidate(YamlSerializableMixin):
         """List of position constraints and beam constraints if there are any."""
         return [self.position_constraint] + ([self.beam_constraint] if self.problem.constraints else [])
 
+    def parametrized_overlap(self, positions: np.ndarray) -> float:
+        """Compute the mode overlap depending on the free element positions.
+
+        Args:
+            positions: Positions of the free elements.
+
+        Returns:
+            Mode overlap value.
+        """
+        setup = self.parametrized_setup.substitute(positions, validate=False)
+        final_beam = Beam(
+            setup.beam_parameters[-1], z_offset=setup.elements[-1][0], wavelength=setup.initial_beam.wavelength
+        )
+        return mode_overlap(
+            final_beam.focus - self.problem.desired_beam.focus,
+            final_beam.waist,
+            self.problem.desired_beam.waist,
+            self.problem.setup.initial_beam.wavelength,
+        )
+
+    def parametrized_focus_and_waist(self, positions: np.ndarray) -> np.ndarray:
+        """Compute the final beam focus and waist depending on the free element positions.
+
+        Args:
+            positions: Positions of the free elements.
+
+        Returns:
+            Array of final beam focus and waist.
+        """
+        setup = self.parametrized_setup.substitute(positions, validate=False)
+        final_beam = setup.beams_fast[-1]
+        return np.array([final_beam.focus, final_beam.waist])
+
     def optimize(
         self,
         filter_pred: Callable[["ModeMatchingSolution"], bool],
@@ -565,11 +598,10 @@ class ModeMatchingSolution(YamlSerializableMixin):
         if self.overlap < 1 - 1e-3:
             raise ValueError("Can only optimize coupling for solutions ~100% mode overlap.")
 
-        focus_and_waist = analysis.make_focus_and_waist(self)
         desired_beam = self.candidate.problem.desired_beam
         desired_focus_and_waist = np.array([desired_beam.focus, desired_beam.waist])
         mode_matching_constraint = optimize.NonlinearConstraint(
-            lambda x: focus_and_waist(x) - desired_focus_and_waist, [0, 0], [0, 0]
+            lambda x: self.candidate.parametrized_focus_and_waist(x) - desired_focus_and_waist, [0, 0], [0, 0]
         )
 
         res = optimize.minimize(
@@ -585,7 +617,7 @@ class ModeMatchingSolution(YamlSerializableMixin):
         if not res.success:
             return None
 
-        mode_matching = analysis.make_mode_overlap(self)(res.x)
+        mode_matching = self.candidate.parametrized_overlap(res.x)
         new_solution = ModeMatchingSolution(
             candidate=self.candidate,
             overlap=mode_matching,
