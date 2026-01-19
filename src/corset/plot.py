@@ -95,23 +95,21 @@ def get_handles(ax: Axes) -> list[tuple[str, Any]]:
 def plot_setup(  # noqa: C901
     self: "OpticalSetup",
     *,
-    ax: Axes | None = None,
-    show_legend: bool | None = None,
     points: int | np.ndarray | None = None,
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict | None = None,
     confidence_interval: float | bool | None = None,
     rayleigh_range_cap: float | None = None,
     free_lenses: list[int] = [],  # noqa: B006
+    ax: Axes | None = None,
+    show_legend: bool | None = None,
+    legend_loc: str | None = None,
     # TODO add back other configuration options?
 ) -> OpticalSetupPlot:
     """Plot the the beam profile and optical elements of the setup.
 
     Args:
         self: The optical setup instance.
-        show_legend: Whether to show a legend for the plot.
-            If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
-        ax: The axes to plot on. If `None`, the current axes are used.
         points: Number of points or specific z-coordinates to evaluate the beam profile.
             If `None`, this defaults to :attr:`Config.PlotSetup.beam_points <corset.config.Config.PlotSetup.beam_points>`.
         limits: Z-coordinate limits for the plot.
@@ -124,6 +122,11 @@ def plot_setup(  # noqa: C901
         rayleigh_range_cap: Maximum Rayleigh range to consider when determining plot limits.
             If `None` this defaults to :attr:`Config.PlotSetup.rayleigh_range_cap <corset.config.Config.PlotSetup.rayleigh_range_cap>`.
         free_lenses: Indices of lenses to treat as free elements in the plot.
+        ax: The axes to plot on. If `None`, the current axes are used.
+        show_legend: Whether to show a legend for the plot.
+            If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
+        legend_loc: Location of the legend in the plot.
+            If `None`, this defaults to :attr:`Config.PlotSetup.legend_loc <corset.config.Config.PlotSetup.legend_loc>`.
 
     Returns:
         An :class:`OpticalSetupPlot` containing references to the plot elements.
@@ -131,6 +134,7 @@ def plot_setup(  # noqa: C901
 
     ax = ax or plt.gca()
     show_legend = Config.get(show_legend, Config.PlotSetup.show_legend)
+    legend_loc = Config.get(legend_loc, Config.PlotSetup.legend_loc)
     beam_kwargs = Config.get(beam_kwargs, Config.PlotSetup.beam_kwargs)
     if confidence_interval is True:
         raise ValueError("confidence_interval cannot be True, must be a float between 0 and 1 or False")
@@ -243,7 +247,7 @@ def plot_setup(  # noqa: C901
     ax.yaxis.set_major_formatter(micro_formatter)
 
     if show_legend:
-        ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc="lower left").set_zorder(1000)
+        ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc=legend_loc).set_zorder(1000)
 
     return OpticalSetupPlot(
         ax=ax,
@@ -258,7 +262,11 @@ def plot_setup(  # noqa: C901
 
 
 def plot_mode_match_solution_setup(
-    self: "ModeMatchingSolution", *, ax: Axes | None = None, show_legend: bool | None = None
+    self: "ModeMatchingSolution",
+    *,
+    ax: Axes | None = None,
+    show_legend: bool | None = None,
+    legend_loc: str | None = None,
 ) -> ModeMatchingPlot:
     """Plot the mode matching solution setup including the desired beam and constraints.
 
@@ -267,6 +275,8 @@ def plot_mode_match_solution_setup(
         ax: The axes to plot on. If `None`, the current axes are used.
         show_legend: Whether to show a legend for the plot.
             If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
+        legend_loc: Location of the legend in the plot.
+            If `None`, this defaults to :attr:`Config.PlotSetup.legend_loc <corset.config.Config.PlotSetup.legend_loc>`.
     Returns:
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
@@ -275,6 +285,7 @@ def plot_mode_match_solution_setup(
 
     ax = ax or plt.gca()
     show_legend = Config.get(show_legend, Config.PlotSetup.show_legend)
+    legend_loc = Config.get(legend_loc, Config.PlotSetup.legend_loc)
 
     problem = self.candidate.problem
 
@@ -287,6 +298,12 @@ def plot_mode_match_solution_setup(
         beam_kwargs={"color": "C1", "label": "Desired Beam"},
         show_legend=show_legend,
     )
+
+    handles = get_handles(ax)
+    if show_legend:
+        desired = handles.pop(-1)
+        assert desired[0] == "Desired Beam"  # noqa: S101
+        handles.insert(1, desired)  # hack to show desired beam 2nd in legend
 
     ranges = []
     for range_ in problem.ranges:
@@ -301,12 +318,14 @@ def plot_mode_match_solution_setup(
             zorder=50,  # TODO
         )
         ranges.append(ax.add_patch(rectangle))
+    if ranges:
+        handles.append(("Shifting Range", ranges[0]))
 
     apertures = []
     passages = []
     for con in problem.constraints:
         if isinstance(con, Aperture):
-            apertures.append(
+            apertures.extend(
                 ax.plot([con.position, con.position], [-con.radius, con.radius], marker="o", color="C4", zorder=80)
             )
         elif isinstance(con, Passage):
@@ -318,6 +337,17 @@ def plot_mode_match_solution_setup(
                 ec="none",
             )
             passages.append(ax.add_patch(rect))
+
+    if apertures:
+        # TODO add dots to vertical line?
+        handles.append(  # fake handle with line marker
+            ("Aperture", Line2D([], [], color="C4", label="Aperture", marker="|", linestyle="None", markersize=10))
+        )
+    if passages:
+        handles.append(("Passage", passages[0]))
+
+    if show_legend:
+        ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc=legend_loc).set_zorder(1000)
 
     ax.set_title(f"Optical Setup ({self.overlap*100:.2f}% mode overlap)")
 

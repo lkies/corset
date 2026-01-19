@@ -80,6 +80,8 @@ class Config:
         """Number of different :math:`z` points to use when plotting beam propagation."""
         show_legend: bool = False
         """Whether to show a legend describing the plot asspects."""
+        legend_loc: str = "lower left"
+        """Location of the legend in the plot."""
         beam_kwargs: typing.ClassVar[dict] = {"color": "C0", "alpha": 0.5}
         """The kwargs to pass to :meth:`~matplotlib.axes.Axes.fill_between`"""
         confidence_interval: float | bool = 0.95
