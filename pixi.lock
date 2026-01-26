@@ -1179,8 +1179,8 @@ packages:
   requires_python: '>=3.8'
 - pypi: ./
   name: beam-corset
-  version: 0.1.1
-  sha256: e2fdc99549e359c62bf8c68677b2ff8c95257ff94d236a1af1bca20e31848801
+  version: 0.2.0
+  sha256: 6dd60a3ea47524c460de002811b450fd810339632c21355e03ce99db866d20ad
   requires_dist:
   - numpy>=2.3.4,<3
   - scipy>=1.16.3,<2
