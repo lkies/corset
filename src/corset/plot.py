@@ -378,9 +378,22 @@ class SensitivityPlot:
     """Plot of a sensitivity analysis with references to the plot elements."""
 
     ax: Axes  #: Axes containing the plot
+    displacements_ci: Ellipse | None  #: Confidence ellipse in terms of required displacements
     contours: list[Any]  #: Contour plots of the sensitivity
     colorbar: Colorbar | None  #: Colorbar for the contour plots
     handles: list  #: Handles for the plot elements
+
+
+def plot_ellipse(
+    ax: Axes, mean: tuple[float, float], var: np.ndarray, confidence_interval: float, **ellipse_kwargs
+) -> Ellipse:
+    eigenvalues, eigenvectors = np.linalg.eigh(var)
+    angle = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
+    diameters = 2 * np.sqrt(eigenvalues) * stats.chi2.ppf(confidence_interval, df=2) ** 0.5
+    base_kwargs = {"fill": False, "ls": "--", "zorder": 100, "color": plt.rcParams["text.color"]}
+    patch = Ellipse(mean, *diameters, angle=angle, **(base_kwargs | ellipse_kwargs))
+    ax.add_patch(patch)
+    return patch
 
 
 def plot_reachability(
@@ -462,15 +475,12 @@ def plot_reachability(
     center = ax.scatter(0, self.candidate.problem.desired_beam.waist, color=contrast_color, marker="o", zorder=100)
     center_ci = None
     if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
-        # plot the confidence ellipse around the optimal point
-        eigenvalues, eigenvectors = np.linalg.eigh(self.setup.beams[-1].gauss_cov)
-        angle = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
-        diameters = 2 * np.sqrt(eigenvalues) * stats.chi2.ppf(confidence_interval, df=2) ** 0.5
-        desired_waist = self.candidate.problem.desired_beam.waist
-        center_ci = Ellipse(
-            (0, desired_waist), *diameters, angle=angle, fill=False, ls="--", color=contrast_color, zorder=100
+        center_ci = plot_ellipse(
+            ax,
+            (0, self.candidate.problem.desired_beam.waist),
+            self.setup.beams[-1].gauss_cov,
+            confidence_interval,
         )
-        ax.add_patch(center_ci)
 
     def select_lines(arr: np.ndarray, dim: int, steps: list[int]) -> np.ndarray:
         steps = [step if i != dim else 1 for i, step in enumerate(steps)]
@@ -531,6 +541,7 @@ def plot_sensitivity(
     y_displacement: float | None = None,
     z_displacement: float | None = None,
     num_samples_z: int | None = None,
+    confidence_interval: float | None = None,
     force_contour_lines: bool | None = None,
     grid_resolution: int | None = None,
     ax: Axes | None = None,
@@ -550,6 +561,8 @@ def plot_sensitivity(
         z_displacement: Displacement magnitude for z-axis values. If `None`, determined automatically from worst_overlap.
         num_samples_z: Number of z-slices to plot if 3 dimensions are used.
             If `None`, this defaults to :attr:`Config.PlotSensitivity.num_samples_z <corset.config.Config.PlotSensitivity.num_samples_z>`.
+        confidence_interval: Confidence ellipse probability in terms of the required x and y displacements.
+            If `None`, this defaults to :attr:`Config.PlotSensitivity.confidence_interval <corset.config.Config.PlotSensitivity.confidence_interval>`.
         force_contour_lines: If `True`, always use contour lines instead of filled contours for plots with two
             degrees of freedom. If `None`, this defaults to :attr:`Config.PlotSensitivity.force_contour_lines <corset.config.Config.PlotSensitivity.force_contour_lines>`.
         grid_resolution: Resolution of the grid for the contour plots.
@@ -564,6 +577,7 @@ def plot_sensitivity(
 
     worst_overlap = Config.get(worst_overlap, Config.PlotSensitivity.worst_overlap)
     num_samples_z = Config.get(num_samples_z, Config.PlotSensitivity.num_samples_z)
+    confidence_interval = Config.get(confidence_interval, Config.PlotSensitivity.confidence_interval)
     force_contour_lines = Config.get(force_contour_lines, Config.PlotSensitivity.force_contour_lines)
     grid_resolution = Config.get(grid_resolution, Config.Overlap.grid_resolution)
     ax = ax or plt.gca()
@@ -636,6 +650,12 @@ def plot_sensitivity(
         ]
         ax.legend(handles=handles, loc="lower left").set_zorder(1000)
 
+    displacements_ci = None
+    if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
+        jac_inv = np.linalg.inv(self.analysis.focus_and_waist_jacobian[:, dimensions[:2]])
+        cov_xy = jac_inv @ self.setup.beams[-1].gauss_cov @ jac_inv.T
+        displacements_ci = plot_ellipse(ax, (0, 0), cov_xy, confidence_interval)
+
     unit = Config.sensitivity_unit
     dims = dimensions
     sens_x = self.analysis.sensitivities[dims[0], dims[0]] * unit.value.factor
@@ -647,7 +667,9 @@ def plot_sensitivity(
 
     ax.set_title(rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}={self.analysis.min_coupling*100:.2f}\%$)")
 
-    return SensitivityPlot(ax=ax, contours=contours, colorbar=colorbar, handles=handles)
+    return SensitivityPlot(
+        ax=ax, displacements_ci=displacements_ci, contours=contours, colorbar=colorbar, handles=handles
+    )
 
 
 def plot_mode_match_solution_all(

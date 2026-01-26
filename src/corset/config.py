@@ -111,6 +111,9 @@ class Config:
         force_contour_lines: bool = False
         """Whether to always use contour lines instead of filled
         contours for plots with two degrees of freedom."""
+        confidence_interval: float | bool = 0.95
+        """Confidence ellipse probability in terms of the required x and y displacements.
+        If `False`, no confidence ellipse is shown."""
 
     class PlotAll:
         """Configuration of default values for mode matching overview plots containing the setup,
