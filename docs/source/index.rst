@@ -12,6 +12,9 @@ Beam Corset Documentation
 
    intro
    gen/basic_usage.ipynb
+   gen/lenses_and_lens_lists.ipynb
+   gen/shifting_ranges_and_selections.ipynb
+   gen/beam_constraints.ipynb
 
 
 .. toctree::

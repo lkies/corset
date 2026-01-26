@@ -18,9 +18,11 @@ Install from PyPI:
 pip install beam-corset
 ```
 
-## Documentation
+## Links
 
-The documentation is hosted on GitHub Pages: [https://lkies.github.io/corset/](https://lkies.github.io/corset/)
+- Documentation: <https://lkies.github.io/corset/intro.html>
+- Source Code: <https://github.com/lkies/corset>
+- Issue Tracker: <https://github.com/lkies/corset/issues>
 
 ## Contributing
 
