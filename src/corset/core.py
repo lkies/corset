@@ -194,12 +194,15 @@ class ThinLens(YamlSerializableMixin):
 class ThickLens(YamlSerializableMixin):
     """Thick lens element including additional information.
 
-    A positive radius of curvature is a convex surface while a negative radius is concave.
+    The signs of the radius of curvature follow the standard optics convention where positive radii
+    correspond to surfaces that are convex when viewed from the input side of the lens. This means
+    that on the entry surface, a positive radius of curvature is a convex surface while on the exit surface,
+    a negative radius of curvature is convex.
     Use :attr:`ThickLens.FLAT` to represent a flat surface. This is an alias for ``float('inf')``.
     """
 
     in_roc: float  #: Input surface radius of curvature, positive is convex
-    out_roc: float  #: Output surface radius of curvature, positive is convex
+    out_roc: float  #: Output surface radius of curvature, negative is convex
     thickness: float  #: Thickness of the lens
     refractive_index: float  #: Refractive index of the lens material
     left_margin: float = 0.0  #: Physical size to the left of the lens center
@@ -222,15 +225,18 @@ class ThickLens(YamlSerializableMixin):
         n2 = self.refractive_index
         in_surface = np.array([[1, 0], [(1 - n2) / (self.in_roc * n2), 1 / n2]])
         propagation = np.array([[1, self.thickness], [0, 1]])
-        out_surface = np.array([[1, 0], [(n2 - 1) / (-self.out_roc), n2]])
+        out_surface = np.array([[1, 0], [(n2 - 1) / (self.out_roc), n2]])
         thickness_correction = np.array([[1, -self.thickness / 2], [0, 1]])
         return thickness_correction @ out_surface @ propagation @ in_surface @ thickness_correction
 
     @cached_property
     def focal_length(self) -> float:
-        """Approximate focal length of the thick lens."""
+        """Approximate focal length of the thick lens calculated using the
+        `lensmaker's equation <https://en.wikipedia.org/wiki/Lens#Lensmaker's_equation>`_."""
         n2, r1, r2 = self.refractive_index, self.in_roc, self.out_roc
-        return 1 / ((n2 - 1) * (1 / r1 + 1 / r2 + ((1 - n2) * self.thickness) / (n2 * r1 * r2)))
+        if np.isinf(r1) and np.isinf(r2):
+            return float("nan")
+        return 1 / ((n2 - 1) * (1 / r1 - 1 / r2 + ((n2 - 1) * self.thickness) / (n2 * r1 * r2)))
 
     def __str__(self) -> str:
         return self.name if self.name is not None else f"f≈{round(self.focal_length*1e3)}mm"
