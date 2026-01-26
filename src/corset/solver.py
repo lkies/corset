@@ -297,6 +297,8 @@ class ModeMatchingProblem(YamlSerializableMixin):
         for num_elements in range(first.min_elements, min(first.max_elements, max_elements) + 1):
             selection = first.selection if first.selection else base_selection
             for comb in combinations_with_replacement(selection, num_elements):
+                if sum(lens.left_margin + lens.right_margin for lens in comb) > (first.right - first.left):
+                    continue  # skip combinations that cannot fit in the range
                 new_setup = [*current_populations, comb]
                 yield from cls.lens_combinations(
                     rest, base_selection, min_elements - num_elements, max_elements - num_elements, new_setup
