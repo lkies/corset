@@ -96,8 +96,8 @@ class Beam(YamlSerializableMixin):
         common_denom = np.pi * self.waist * np.sqrt(np.pi**2 * self.waist**4 + wl**2 * (self.focus - z) ** 2)
         jac = np.array(
             [
-                [wl**2 * (self.focus - z) / common_denom],
-                [(np.pi**2 * self.waist**4 - wl**2 * (self.focus - z) ** 2) / common_denom / self.waist],
+                wl**2 * (self.focus - z) / common_denom,
+                (np.pi**2 * self.waist**4 - wl**2 * (self.focus - z) ** 2) / common_denom / self.waist,
             ]
         )
         if np.isscalar(z):

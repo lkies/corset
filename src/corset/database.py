@@ -43,7 +43,7 @@ class LensList(YamlSerializableMixin):
     def __getitem__(self, index: slice | list[int] | list[str]) -> "LensList":
         pass
 
-    def __getitem__(self, index: int | str | slice | list[int] | list[str]) -> Lens | "LensList":
+    def __getitem__(self, index: int | str | slice | list[int] | list[str]) -> "Lens | LensList":
         if isinstance(index, int):
             return self.lenses[index]
         elif isinstance(index, str):
