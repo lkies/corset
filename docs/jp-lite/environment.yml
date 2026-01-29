@@ -1,0 +1,13 @@
+name: xeus-kernel
+channels:
+  - https://repo.prefix.dev/emscripten-forge-dev
+  - https://repo.prefix.dev/conda-forge
+dependencies:
+  - xeus-python
+  - numpy >=2.3.4,<3
+  - matplotlib >=3.10.7,<4
+  - pandas >=2.3.3,<3
+  - scipy >=1.16.3,<2
+  - pyyaml
+  - pip:
+    - beam-corset

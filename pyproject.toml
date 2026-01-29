@@ -42,21 +42,42 @@ doc = [
     "sphinx-book-theme>=1.1.4,<2",
     "numpydoc>=1.10.0,<2",
     "sphinx-autodoc-typehints>=3.5.2,<4",
-    "nbsphinx>=0.9.8,<0.10", "sphinx-copybutton>=0.5.2,<0.6",
+    "nbsphinx>=0.9.8,<0.10",
+    "sphinx-copybutton>=0.5.2,<0.6",
 ]
-
-[tool.pixi.environments]
-dev = ["dev"]
-doc = ["doc", "dev"]
 
 [tool.pixi.feature.doc.dependencies]
 pandoc = ">=3.8.3,<4" # this only installs properly as a conda dependency
 
-[tool.pixi.tasks]
-build = "pixi run -e dev python -m build -o dist"
-publish = "pixi run -e dev twine upload dist/*"
-build-docs = "pixi run -e doc sphinx-build -M html docs/source/ docs/build/"
+[tool.pixi.feature.jp-lite.dependencies]
+pip = "*"
+jupyterlite-xeus = ">=4.4.0,<5"
+jupyter_server = ">=2.17.0,<3"
 
+
+[tool.pixi.environments]
+dev = ["dev"]
+doc = ["doc", "dev"]
+jp-lite = ["jp-lite"]
+
+[tool.pixi.tasks]
+build = { cmd = "python -m build -o dist", default-environment = "dev" }
+publish = { cmd = "twine upload dist/*", default-environment = "dev" }
+build-docs = { cmd = "sphinx-build -M html docs/source/ docs/build/", default-environment = "doc" }
+prepare-jp-lite-doc-notebooks = { cmd = [
+    "rm", "-rf", "docs/jp-lite/files/guide/",
+    "&&", "mkdir", "-p", "docs/jp-lite/files/guide/",
+    "&&", "cp", "-r", "docs/notebooks/*", "docs/jp-lite/files/guide/"
+], default-environment = "doc" }
+build-jp-lite = { cmd = [
+    "cd", "docs/jp-lite/", "&&",
+    "jupyter", "lite", "build",
+    # "--lite-dir=docs/jp-lite/",
+    # "--XeusAddon.environment_file=docs/jp-lite/environment.yml",
+    # "--contents=docs/jp-lite/files/",
+    # "--output-dir=docs/build/html/jp-lite",
+], default-environment = "jp-lite", depends-on = ["prepare-jp-lite-doc-notebooks"] }
+build-pages = { depends-on = ["build-docs", "build-jp-lite"] }
 
 [tool.pytest.ini_options]
 # Ensure pytest looks for tests in the tests/ directory and uses the normal test_*.py pattern

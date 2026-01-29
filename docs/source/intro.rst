@@ -11,14 +11,18 @@ Beam Corset is a Gaussian optics mode matching tool made for use in Jupyter note
 - Account for existing fixed lenses
 - Detailed reachability and sensitivity analysis of solutions
 
+
 Installation
 ------------
 
 Install from PyPI:
 
 .. code-block:: shell
-
+   
    pip install beam-corset
+
+..  tip::
+   Try Beam Corset in your browswer with `JupyterLite <https://lkies.github.io/corset/jp-lite/lab/index.html?path=template.ipynb>`_!
 
 Links
 -----
@@ -26,3 +30,4 @@ Links
 - Documentation: https://lkies.github.io/corset/intro.html
 - Source Code: https://github.com/lkies/corset
 - Issue Tracker: https://github.com/lkies/corset/issues
+- JupyterLite: https://lkies.github.io/corset/jp-lite

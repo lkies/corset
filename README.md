@@ -23,6 +23,7 @@ pip install beam-corset
 - Documentation: <https://lkies.github.io/corset/intro.html>
 - Source Code: <https://github.com/lkies/corset>
 - Issue Tracker: <https://github.com/lkies/corset/issues>
+- JupyterLite: <https://lkies.github.io/corset/jp-lite>
 
 ## Contributing
 
