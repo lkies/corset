@@ -61,6 +61,7 @@ html_theme_options = {
         "image_light": "../../misc/logo/logo_light.svg",
         "image_dark": "../../misc/logo/logo_dark.svg",
     },
+    "home_page_in_toc": True,
 }
 
 html_favicon = "../../misc/logo/favicon.svg"

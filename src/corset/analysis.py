@@ -184,26 +184,26 @@ class ModeMatchingAnalysis:
 
     @cached_property
     def min_sensitivity_axis(self) -> int:
-        """The index :math:`i` of the degree of freedom with minimal absolute sensitivity :math:`s_{ii}`."""
+        """The index :math:`i` of the degree of freedom with minimal sensitivity :math:`s_{ii}`."""
 
         diag_sensitivities = np.abs(np.diag(self.sensitivities))
         return int(np.argmin(diag_sensitivities))
 
     @cached_property
     def min_sensitivity(self) -> float:
-        """The minimal absolute sensitivity among all degrees of freedom."""
+        """The minimal sensitivity among all degrees of freedom."""
 
         return float(self.sensitivities[self.min_sensitivity_axis, self.min_sensitivity_axis])
 
     @cached_property
     def max_sensitivity_axis(self) -> int:
-        """The index :math:`i` of the degree of freedom with maximal absolute sensitivity :math:`s_{ii}`."""
+        """The index :math:`i` of the degree of freedom with maximal sensitivity :math:`s_{ii}`."""
         diag_sensitivities = np.abs(np.diag(self.sensitivities))
         return int(np.argmax(diag_sensitivities))
 
     @cached_property
     def max_sensitivity(self) -> float:
-        """The maximal absolute sensitivity among all degrees of freedom."""
+        """The maximal sensitivity among all degrees of freedom."""
 
         return float(self.sensitivities[self.max_sensitivity_axis, self.max_sensitivity_axis])
 
@@ -214,9 +214,9 @@ class ModeMatchingAnalysis:
         r"""The basis vectors spanning the constant overlap sub-space around the optimum.
 
         Note:
-            This is simply determined as the corresponding eigenvectors two all but the two largest eigenvalues
-            of the Hessian :math:`\mathbf{H}`. These eigenvalues are usually many orders of magnitude smaller than the
-            two largest ones, but generally not zero.
+            This is simply determined as the corresponding eigenvectors to all but the two largest eigenvalues
+            of the Hessian :math:`\mathbf{H}`. These eigenvalues are generally not zero but they should by
+            orders of magnitude smaller than the two largest ones.
         """
 
         eigs = np.linalg.eigh(self.hessian)

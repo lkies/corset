@@ -1902,7 +1902,7 @@ packages:
 - pypi: ./
   name: beam-corset
   version: 0.2.1
-  sha256: b8104511cd061a83df131ee4e66282d4c99b40f4b920a88ebff31ae5b7056f4e
+  sha256: 3441c459445dd0ed36f80acdba942ad681fbf6764736855135b97ff3f052f1e6
   requires_dist:
   - numpy>=2.3.4,<3
   - scipy>=1.16.3,<2

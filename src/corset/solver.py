@@ -546,7 +546,8 @@ class ModeMatchingCandidate(YamlSerializableMixin):
 class ModeMatchingSolution(YamlSerializableMixin):
     """A solution to a mode matching problem.
 
-    Implements :meth:`_repr_png_` to show a plot of the solution setup in IPython environments.
+    Implements :meth:`_repr_png_` to show a plot of the solution setup in IPython environments
+    produced by :meth:`ModeMatchingSolution.plot_all`.
     """
 
     candidate: ModeMatchingCandidate  #: The candidate that produced this solution

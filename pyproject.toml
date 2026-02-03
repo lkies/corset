@@ -72,10 +72,6 @@ prepare-jp-lite-doc-notebooks = { cmd = [
 build-jp-lite = { cmd = [
     "cd", "docs/jp-lite/", "&&",
     "jupyter", "lite", "build",
-    # "--lite-dir=docs/jp-lite/",
-    # "--XeusAddon.environment_file=docs/jp-lite/environment.yml",
-    # "--contents=docs/jp-lite/files/",
-    # "--output-dir=docs/build/html/jp-lite",
 ], default-environment = "jp-lite", depends-on = ["prepare-jp-lite-doc-notebooks"] }
 build-pages = { depends-on = ["build-docs", "build-jp-lite"] }
 

@@ -28,7 +28,8 @@ from .serialize import YamlSerializableMixin
 class Beam(YamlSerializableMixin):
     """Paraxial Gaussian beam representation.
 
-    Implements :meth:`_repr_png_` to show a plot of the beam radius in IPython environments.
+    Implements :meth:`_repr_png_` to show a plot of the beam radius in IPython environments
+    produced by :func:`Beam.plot`.
     """
 
     beam_parameter: complex
@@ -249,7 +250,8 @@ Lens = ThinLens | ThickLens  #: Lens type union
 class OpticalSetup(YamlSerializableMixin):
     """Optical setup described by an initial beam and a sequence of elements.
 
-    Implements :meth:`_repr_png_` to show a plot of the optical setup in IPython environments.
+    Implements :meth:`_repr_png_` to show a plot of the optical setup in IPython environments
+    produced by :meth:`OpticalSetup.plot`.
     """
 
     initial_beam: Beam  #: Initial beam before left most element
@@ -371,13 +373,19 @@ class OpticalSetup(YamlSerializableMixin):
             setup = cls(Beam.from_gauss(focus, waist, wavelength), substitute_positions(elem_positions), validate=False)
             return setup.radius(positions)  # pyright: ignore[reportReturnType]
 
-        beam_guess = list(p0 if p0 is not None else (positions[np.argmin(radii)], np.min(radii)))
+        left_most_element_pos = float("inf")
+        if len(elements) > 0 and isinstance(elements[0][0], tuple):
+            left_most_element_pos = elements[0][0][0]
+
+        if p0 is None and np.all(positions >= left_most_element_pos):
+            raise ValueError("At least one data point must be before the first element for initial guess heuristic.")
+
+        filtered_radii = radii[positions < left_most_element_pos]
+        beam_guess = list(p0 if p0 is not None else (positions[np.argmin(filtered_radii)], np.min(filtered_radii)))
         initial_guess = beam_guess + [pos[0] for pos, _ in elements if isinstance(pos, tuple)]
 
         if not all(left < right for left, right in pairwise(initial_guess[2:])):
             raise ValueError("Initial guess for element positions must be in ascending order.")
-        if p0 is None and np.all(positions >= initial_guess[2]):
-            raise ValueError("At least one data point must be before the first element for initial guess heuristic.")
 
         element_bounds = [(pos[0] - pos[1], pos[0] + pos[1]) for pos, _ in elements if isinstance(pos, tuple)]
         bounds = np.transpose([(-np.inf, np.inf)] * 2 + element_bounds)

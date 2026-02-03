@@ -18,9 +18,12 @@ Install from PyPI:
 pip install beam-corset
 ```
 
+> [!Tip]
+Try Beam Corset in your browser with [JupyterLite](https://lkies.github.io/corset/jp-lite/lab/index.html?path=template.ipynb)!
+
 ## Links
 
-- Documentation: <https://lkies.github.io/corset/intro.html>
+- Documentation: <https://lkies.github.io/corset>
 - Source Code: <https://github.com/lkies/corset>
 - Issue Tracker: <https://github.com/lkies/corset/issues>
 - JupyterLite: <https://lkies.github.io/corset/jp-lite>
