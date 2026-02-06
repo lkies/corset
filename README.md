@@ -28,11 +28,31 @@ Try Beam Corset in your browser with [JupyterLite](https://lkies.github.io/corse
 - Issue Tracker: <https://github.com/lkies/corset/issues>
 - JupyterLite: <https://lkies.github.io/corset/jp-lite>
 
-## Contributing
+## Information for Developers
 
-TODO
+This project is managed and built using [Pixi](https://pixi.prefix.dev/latest/installation/), see their documentation for more information on dependency management and other features. To install the development environment for usage in Jupyter notebooks, run:
 
-### Git Pre-Commit
+```shell
+pixi install -e dev
+```
+
+The [`pyproject.toml`](./pyproject.toml) file defines the following tasks:
+
+- `build`: Build the package
+- `publish`: Publish the package to PyPI
+- `build-docs`: Build the documentation
+- `build-jp-lite`: Build the JupyterLite instance for the documentation (does not work properly on Windows)
+- `pages`: Executes `build-docs` and `build-jp-lite` to build the web pages for GitHub Pages
+
+Tasks can be executed with:
+
+```shell
+pixi run [task]
+```
+
+They will automatically be executed in their correct Python environment. Note that this only works if no environment has been activated with `pixi shell -e [env]`.
+
+To prevent committing notebook outputs to the repository and producing unnecessary diffs, set up the appropriate filters with the following shell commands.
 
 ```shell
 git config filter.strip-notebook-output.clean 'pixi run -e dev jupyter nbconvert --ClearOutputPreprocessor.enabled=True --to=notebook --stdin --stdout --log-level=ERROR'
