@@ -15,6 +15,8 @@ from matplotlib.collections import (
 )
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
+from matplotlib.legend import Legend
+from matplotlib.legend_handler import HandlerPatch
 from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.text import Annotation
@@ -49,6 +51,35 @@ def fig_to_png(fig: Figure) -> bytes:
     return buf.getvalue()
 
 
+# helper classes for fancy corset legend, yes, kind of overkill for an easter egg
+class CorsetPatch(Rectangle):
+    def __init__(self, *args, lace_color, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lace_color = lace_color
+
+
+class HandlerCorset(HandlerPatch):
+    def create_artists(self, legend, orig_handle: CorsetPatch, xdescent, ydescent, width, height, fontsize, trans):
+        corset = CorsetPatch(
+            (xdescent, ydescent),
+            width,
+            height,
+            color=orig_handle.get_facecolor(),
+            lace_color=orig_handle.lace_color,
+            transform=trans,
+        )
+        cross_edges = np.linspace(xdescent, xdescent + width, 4)
+        cross_x = (cross_edges[1:] + cross_edges[:-1]) / 2
+        cross_y = np.ones_like(cross_x) * (ydescent + height / 2)
+        crosses = Line2D(
+            cross_x, cross_y, color=orig_handle.lace_color, transform=trans, linestyle="none", marker="x", markersize=4
+        )
+        return [corset, crosses]
+
+
+Legend.update_default_handler_map({CorsetPatch: HandlerCorset()})
+
+
 @dataclass(frozen=True)
 class OpticalSetupPlot:
     """Plot of an optical setup with references to the plot elements."""
@@ -59,7 +90,7 @@ class OpticalSetupPlot:
     beam: FillBetweenPolyCollection  #: Fill between collection for the beam
     beam_ci: list[Line2D]  #: List of lines representing beam confidence intervals
     lenses: list[tuple[LineCollection, Annotation, Rectangle | None]]  #: List of lens plot elements
-    handles: list[tuple[str, Any]]  #: List of plot handles by their legend labels
+    handles: list[tuple[Any, str]]  #: List of plot handles by their legend labels
     r_max: float  #: Maximum beam radius in the plot
 
 
@@ -73,22 +104,23 @@ class ModeMatchingPlot:
     ranges: list[Rectangle]  #: List of ranges in the plot
     apertures: list[Line2D]  #: List of aperture lines in the plot
     passages: list[Rectangle]  #: List of passage rectangles in the plot
+    handles: list[tuple[Any, str]]  #: List of plot handles by their legend labels
 
 
-def get_handles(ax: Axes) -> list[tuple[str, Any]]:
+def get_handles(ax: Axes) -> list[tuple[Any, str]]:
     """Get a list of plot handles by their legend labels.
 
     Args:
         ax: The axes to get the handles from.
 
     Returns:
-        A list of tuples containing legend labels and their corresponding plot handles, empty if no legend exists.
+        A list of tuples containing legend handles and their corresponding labels, empty if no legend exists.
     """
 
     legend = ax.get_legend()
     if legend is None:
         return []
-    return [(text.get_text(), handle) for handle, text in zip(legend.legend_handles, legend.texts, strict=True)]
+    return [(handle, text.get_text()) for handle, text in zip(legend.legend_handles, legend.texts, strict=True)]
 
 
 # TODO refactor this function to reduce complexity
@@ -141,6 +173,21 @@ def plot_setup(  # noqa: C901
     confidence_interval = Config.get(confidence_interval, Config.PlotSetup.confidence_interval)
     rayleigh_range_cap = Config.get(rayleigh_range_cap, Config.PlotSetup.rayleigh_range_cap)
 
+    # plot the beam as a corset it it is called "Corset", there are no lenses,
+    # the limits are automatically determined and there is no beam covariance
+    # all of this should be the case for the desired beam in mode matching solutions
+    plot_corset = all(
+        [
+            limits is None,
+            points is None,
+            beam_kwargs.get("label") == "Corset",
+            not self.elements,
+            self.initial_beam.gauss_cov is None,
+        ]
+    )
+    if plot_corset:
+        beam_kwargs |= {"color": "#e6e6e6" if Config.mpl_is_dark() else "#1a1a1a", "lw": 6, "alpha": 1, "zorder": 150}
+
     lens_positions = [pos for pos, _ in self.elements]
 
     if isinstance(points, np.ndarray):
@@ -168,8 +215,24 @@ def plot_setup(  # noqa: C901
     rs = cast(np.ndarray, self.radius(zs))
     fill_between = ax.fill_between(zs, -rs, rs, **{"zorder": 100, **beam_kwargs})
     beam_label = beam_kwargs.get("label", "Beam")
-    handles.append((beam_label, fill_between))
+    handles.append((fill_between, beam_label))
     r_max = np.max(rs)
+
+    if plot_corset:
+        # plot the laces
+        lace_color = "#333333" if Config.mpl_is_dark() else "#cccccc"
+        n_laces = 3
+        bounds = np.linspace(*limits, n_laces + 1)  # pyright: ignore[reportCallIssue]
+        width = np.diff(bounds)[0] * 0.6
+        height = self.initial_beam.waist
+        positions = (bounds[:-1] + bounds[1:]) / 2
+        for pos in positions:
+            kwargs = {"color": lace_color, "lw": 3, "solid_capstyle": "round", "zorder": 150}
+            ax.plot([pos - width / 2, pos + width / 2], [-height / 2, height / 2], **kwargs)
+            ax.plot([pos - width / 2, pos + width / 2], [height / 2, -height / 2], **kwargs)
+
+        # make the legend artist
+        handles[-1] = (CorsetPatch((0, 0), 1, 1, color=beam_kwargs["color"], lace_color=lace_color), beam_label)
 
     beam_deviation = []
     if confidence_interval is not False and self.beams[0].gauss_cov is not None:
@@ -181,7 +244,7 @@ def plot_setup(  # noqa: C901
             line = ax.plot(zs, r0 + ci, ls="--", color=ci_color, alpha=beam_kwargs.get("alpha"), zorder=105)[0]
             beam_deviation.append(line)
         r_max = np.max(rs + rs_ci)
-        handles.append((f"{round(confidence_interval*100)}% CI ({beam_label})", beam_deviation[0]))
+        handles.append((beam_deviation[0], f"{round(confidence_interval*100)}% CI ({beam_label})"))
     # TODO make beam plot function?
 
     # TODO factor out into plot lens function?
@@ -230,10 +293,10 @@ def plot_setup(  # noqa: C901
 
     if lenses and not any(label == "Lens" for label, _ in handles):
         # fake handle with vertical line marker
-        handles.append(("Lens", Line2D([], [], color=color, label="Lens", marker="|", linestyle="None", markersize=10)))
+        handles.append((Line2D([], [], color=color, label="Lens", marker="|", linestyle="None", markersize=10), "Lens"))
     rectangles = [r for _, _, r in lenses if r is not None]
     if rectangles and not any(label == "Lens Margin" for label, _ in handles):
-        handles.append(("Lens Margin", rectangles[0]))
+        handles.append((rectangles[0], "Lens Margin"))
 
     ax.set_ylim(
         min(-r_max * (1 + 3 * RELATIVE_MARGIN), ax.get_ylim()[0]),
@@ -247,7 +310,7 @@ def plot_setup(  # noqa: C901
     ax.yaxis.set_major_formatter(micro_formatter)
 
     if show_legend:
-        ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc=legend_loc).set_zorder(1000)
+        ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
 
     return OpticalSetupPlot(
         ax=ax,
@@ -264,6 +327,8 @@ def plot_setup(  # noqa: C901
 def plot_mode_match_solution_setup(
     self: "ModeMatchingSolution",
     *,
+    setup_kwargs: dict | None = None,
+    desired_kwargs: dict | None = None,
     ax: Axes | None = None,
     show_legend: bool | None = None,
     legend_loc: str | None = None,
@@ -272,11 +337,15 @@ def plot_mode_match_solution_setup(
 
     Args:
         self: The mode matching solution instance.
+        setup_kwargs: Additional keyword arguments passed to the setup plot function.
+            If `None`, this defaults to :attr:`Config.PlotSolution.setup_kwargs <corset.config.Config.PlotSolution.setup_kwargs>`.
+        desired_kwargs: Additional keyword arguments passed to the desired beam plot function.
+            If `None`, this defaults to :attr:`Config.PlotSolution.desired_kwargs <corset.config.Config.PlotSolution.desired_kwargs>`.
         ax: The axes to plot on. If `None`, the current axes are used.
         show_legend: Whether to show a legend for the plot.
-            If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
+            If `None`, this defaults to :attr:`Config.PlotSolution.show_legend <corset.config.Config.PlotSolution.show_legend>`.
         legend_loc: Location of the legend in the plot.
-            If `None`, this defaults to :attr:`Config.PlotSetup.legend_loc <corset.config.Config.PlotSetup.legend_loc>`.
+            If `None`, this defaults to :attr:`Config.PlotSolution.legend_loc <corset.config.Config.PlotSolution.legend_loc>`.
     Returns:
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
@@ -284,25 +353,31 @@ def plot_mode_match_solution_setup(
     from .solver import Aperture, Passage
 
     ax = ax or plt.gca()
-    show_legend = Config.get(show_legend, Config.PlotSetup.show_legend)
-    legend_loc = Config.get(legend_loc, Config.PlotSetup.legend_loc)
+    setup_kwargs = Config.get(setup_kwargs, Config.PlotSolution.setup_kwargs)
+    desired_kwargs = Config.get(desired_kwargs, Config.PlotSolution.desired_kwargs)
+    show_legend = Config.get(show_legend, Config.PlotSolution.show_legend)
+    legend_loc = Config.get(legend_loc, Config.PlotSolution.legend_loc)
 
     problem = self.candidate.problem
 
     setup_plot = plot_setup(
-        self.setup, ax=ax, free_lenses=self.candidate.parametrized_setup.free_elements, show_legend=show_legend
+        self.setup,
+        ax=ax,
+        free_lenses=self.candidate.parametrized_setup.free_elements,
+        show_legend=show_legend,
+        **setup_kwargs,
     )
     desired_plot = plot_setup(
         OpticalSetup(problem.desired_beam, []),
         ax=ax,
-        beam_kwargs={"color": "C1", "label": "Desired Beam"},
+        beam_kwargs=desired_kwargs,
         show_legend=show_legend,
     )
 
     handles = get_handles(ax)
     if show_legend:
         desired = handles.pop(-1)
-        assert desired[0] == "Desired Beam"  # noqa: S101
+        assert desired[1] == desired_kwargs["label"]  # noqa: S101
         handles.insert(1, desired)  # hack to show desired beam 2nd in legend
 
     ranges = []
@@ -319,7 +394,7 @@ def plot_mode_match_solution_setup(
         )
         ranges.append(ax.add_patch(rectangle))
     if ranges:
-        handles.append(("Shifting Range", ranges[0]))
+        handles.append((ranges[0], "Shifting Range"))
 
     apertures = []
     passages = []
@@ -341,13 +416,13 @@ def plot_mode_match_solution_setup(
     if apertures:
         # TODO add dots to vertical line?
         handles.append(  # fake handle with line marker
-            ("Aperture", Line2D([], [], color="C4", label="Aperture", marker="|", linestyle="None", markersize=10))
+            (Line2D([], [], color="C4", label="Aperture", marker="|", linestyle="None", markersize=10), "Aperture")
         )
     if passages:
-        handles.append(("Passage", passages[0]))
+        handles.append((passages[0], "Passage"))
 
     if show_legend:
-        ax.legend([lbl for _, lbl in handles], [han for han, _ in handles], loc=legend_loc).set_zorder(1000)
+        ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
 
     ax.set_title(f"Optical Setup ({self.overlap*100:.2f}% mode overlap)")
 
@@ -358,6 +433,7 @@ def plot_mode_match_solution_setup(
         ranges=ranges,
         apertures=apertures,
         passages=passages,
+        handles=handles,
     )
 
 

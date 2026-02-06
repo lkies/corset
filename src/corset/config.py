@@ -87,6 +87,18 @@ class Config:
         confidence_interval: float | bool = 0.95
         """Confidence interval for the beam envelope. If `False`, no confidence interval is shown."""
 
+    class PlotSolution:
+        """Configuration of default values for mode matching solution plots."""
+
+        setup_kwargs: typing.ClassVar[dict] = {}
+        """Keyword arguments to pass to the setup plot."""
+        desired_kwargs: typing.ClassVar[dict] = {"color": "C1", "label": "Desired Beam"}
+        """Keyword arguments for the desired beam plot."""
+        show_legend: bool = True
+        """Whether to show a legend describing the plot asspects."""
+        legend_loc: str = "upper right"
+        """Location of the legend in the plot."""
+
     class PlotReachability:
         """Configuration of default values for reachability plots."""
 
