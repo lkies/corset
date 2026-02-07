@@ -52,15 +52,15 @@ def fig_to_png(fig: Figure) -> bytes:
 
 
 # helper classes for fancy corset legend, yes, kind of overkill for an easter egg
-class CorsetPatch(Rectangle):
+class _CorsetPatch(Rectangle):
     def __init__(self, *args, lace_color, **kwargs):
         super().__init__(*args, **kwargs)
         self.lace_color = lace_color
 
 
-class HandlerCorset(HandlerPatch):
-    def create_artists(self, legend, orig_handle: CorsetPatch, xdescent, ydescent, width, height, fontsize, trans):
-        corset = CorsetPatch(
+class _HandlerCorset(HandlerPatch):
+    def create_artists(self, legend, orig_handle: _CorsetPatch, xdescent, ydescent, width, height, fontsize, trans):
+        corset = _CorsetPatch(
             (xdescent, ydescent),
             width,
             height,
@@ -77,7 +77,7 @@ class HandlerCorset(HandlerPatch):
         return [corset, crosses]
 
 
-Legend.update_default_handler_map({CorsetPatch: HandlerCorset()})
+Legend.update_default_handler_map({_CorsetPatch: _HandlerCorset()})
 
 
 @dataclass(frozen=True)
@@ -232,7 +232,7 @@ def plot_setup(  # noqa: C901
             ax.plot([pos - width / 2, pos + width / 2], [height / 2, -height / 2], **kwargs)
 
         # make the legend artist
-        handles[-1] = (CorsetPatch((0, 0), 1, 1, color=beam_kwargs["color"], lace_color=lace_color), beam_label)
+        handles[-1] = (_CorsetPatch((0, 0), 1, 1, color=beam_kwargs["color"], lace_color=lace_color), beam_label)
 
     beam_deviation = []
     if confidence_interval is not False and self.beams[0].gauss_cov is not None:

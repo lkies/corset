@@ -12,7 +12,7 @@ The typical naming scheme for these databases is as follows:
 
 e.g. ``quantum_control/Thorlabs_BX_L1064_M10`` is a database from the Quantum Control made up of
 Thorlabs bi-convex lenses applicable for 1064 nm light with a total margin (left + right) of 10 mm.
-There are also combined databases, where the manufacturer and lens type are replaced with `Combined`.
+There are also combined databases, where the manufacturer and lens type are replaced with ``Combined``.
 
 The lens type shorthands are as follows:
 
@@ -29,7 +29,7 @@ The lenses in these databases adhere to the following conventions:
 
     [first letter of manufacturer][lens type][nominal focal length in mm]
 
-so a Thorlabs bi-convex lens with a nominal focal length of 50 mm is named `TBC50`.
+so a Thorlabs bi-convex lens with a nominal focal length of 50 mm is named ``TBC50``.
 This keeps the name short for plotting and to make it easier to index into the lens list by name.
 """
 

@@ -79,7 +79,7 @@ class Config:
         beam_points: int = 500
         """Number of different :math:`z` points to use when plotting beam propagation."""
         show_legend: bool = False
-        """Whether to show a legend describing the plot asspects."""
+        """Whether to show a legend describing the plot aspects."""
         legend_loc: str = "lower left"
         """Location of the legend in the plot."""
         beam_kwargs: typing.ClassVar[dict] = {"color": "C0", "alpha": 0.5}
@@ -94,9 +94,9 @@ class Config:
         """Keyword arguments to pass to the setup plot."""
         desired_kwargs: typing.ClassVar[dict] = {"color": "C1", "label": "Desired Beam"}
         """Keyword arguments for the desired beam plot."""
-        show_legend: bool = True
-        """Whether to show a legend describing the plot asspects."""
-        legend_loc: str = "upper right"
+        show_legend: bool = False
+        """Whether to show a legend describing the plot aspects."""
+        legend_loc: str = "lower left"
         """Location of the legend in the plot."""
 
     class PlotReachability:
