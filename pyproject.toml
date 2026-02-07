@@ -3,7 +3,7 @@ authors = [{name = "Lorenz Kies", email = "dev@lkies.net"}]
 dependencies = ["numpy>=2.3.4,<3", "scipy>=1.16.3,<2", "pandas>=2.3.3,<3", "matplotlib>=3.10.7,<4", "pyyaml>=6.0.3,<7"]
 name = "beam-corset"
 requires-python = ">= 3.11"
-version = "0.3.0"
+version = "0.3.1"
 description = "Beam Corset is a Gaussian optics mode matching tool made for use in Jupyter notebooks."
 readme = "README.md"
 license = "BSD-3-Clause"
