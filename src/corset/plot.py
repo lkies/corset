@@ -186,7 +186,12 @@ def plot_setup(  # noqa: C901
         ]
     )
     if plot_corset:
-        beam_kwargs |= {"color": "#e6e6e6" if Config.mpl_is_dark() else "#1a1a1a", "lw": 6, "alpha": 1, "zorder": 150}
+        beam_kwargs = beam_kwargs | {  # don't use inplace `|` to avoid modifying config value
+            "color": "#e6e6e6" if Config.mpl_is_dark() else "#1a1a1a",
+            "lw": 6,
+            "alpha": 1,
+            "zorder": 150,
+        }
 
     lens_positions = [pos for pos, _ in self.elements]
 
@@ -517,9 +522,7 @@ def plot_reachability(
     line_step = Config.get(line_step, Config.PlotReachability.line_step)
     confidence_interval = Config.get(confidence_interval, Config.PlotReachability.confidence_interval)
     grid_resolution = Config.get(grid_resolution, Config.Overlap.grid_resolution)
-
-    if dimensions is None:
-        dimensions = list(range(len(self.positions)))
+    dimensions = list(Config.get(dimensions, range(len(self.positions))))
 
     num_dof = len(dimensions)
     displacement = cast(list, [displacement] * num_dof if np.isscalar(displacement) else displacement)
@@ -529,7 +532,7 @@ def plot_reachability(
     linspaces = [
         np.linspace(-d, d, num=n) + offset
         for d, n, offset in zip(
-            displacement, num_samples, self.positions, strict=True  # pyright: ignore[reportArgumentType]
+            displacement, num_samples, self.positions[dimensions], strict=True  # pyright: ignore[reportArgumentType]
         )
     ]
 
@@ -569,7 +572,7 @@ def plot_reachability(
         waists_flat = select_lines(waists, i, line_step)  # pyright: ignore[reportArgumentType]
         lines.append([])
         for focus, waist in zip(focuses_flat, waists_flat, strict=True):
-            line = ax.plot(focus, waist, color=f"C{dim}", label=rf"$\Delta x_{i}$ ($\pm{disp*1e3:.1f}$ mm)")[0]
+            line = ax.plot(focus, waist, color=f"C{i}", label=rf"$\Delta x_{dim}$ ($\pm{disp*1e3:.1f}$ mm)")[0]
             lines[-1].append(line)
         ax.annotate(
             "",
