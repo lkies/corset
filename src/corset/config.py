@@ -40,7 +40,7 @@ class Config:
         dark by analyzing the figure background color.
 
         Returns:
-            `True` if the current Matplotlib theme is dark, `False` otherwise.
+            ``True`` if the current Matplotlib theme is dark, ``False`` otherwise.
         """
         if cls.overwrite_dark_theme is not None:
             return cls.overwrite_dark_theme
@@ -85,7 +85,7 @@ class Config:
         beam_kwargs: typing.ClassVar[dict] = {"color": "C0", "alpha": 0.5}
         """The kwargs to pass to :meth:`~matplotlib.axes.Axes.fill_between`"""
         confidence_interval: float | bool = 0.95
-        """Confidence interval for the beam envelope. If `False`, no confidence interval is shown."""
+        """Confidence interval for the beam envelope. If ``False``, no confidence interval is shown."""
 
     class PlotSolution:
         """Configuration of default values for mode matching solution plots."""
@@ -110,7 +110,7 @@ class Config:
         """Line step to use for all or each dimension (if a list),
         i.e. the step size to skip certain lines for increased smoothness while retaining clarity."""
         confidence_interval: float | bool = 0.95
-        """Confidence ellipse for focus position and waist radius. If `False`, no confidence ellipse is shown."""
+        """Confidence ellipse for focus position and waist radius. If ``False``, no confidence ellipse is shown."""
 
     class PlotSensitivity:
         """Configuration of default values for sensitivity plots."""
@@ -125,7 +125,7 @@ class Config:
         contours for plots with two degrees of freedom."""
         confidence_interval: float | bool = 0.95
         """Confidence ellipse probability in terms of the required x and y displacements.
-        If `False`, no confidence ellipse is shown."""
+        If ``False``, no confidence ellipse is shown."""
 
     class PlotAll:
         """Configuration of default values for mode matching overview plots containing the setup,
@@ -146,11 +146,11 @@ class Config:
 
     @staticmethod
     def get(value: T | None, default: T) -> T:
-        """Get a configuration value, using the default if the provided value is `None`.
+        """Get a configuration value, using the default if the provided value is ``None``.
 
         Args:
             value: The value to check.
-            default: The default value to use if `value` is `None`.
+            default: The default value to use if `value` is ``None``.
 
         Returns:
             The provided value or the default.

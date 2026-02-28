@@ -29,7 +29,7 @@ The lenses in these databases adhere to the following conventions:
 
     [first letter of manufacturer][lens type][nominal focal length in mm]
 
-so a Thorlabs bi-convex lens with a nominal focal length of 50 mm is named ``TBC50``.
+so a Thorlabs bi-convex lens with a nominal focal length of 50 mm is named ``TBX50``.
 This keeps the name short for plotting and to make it easier to index into the lens list by name.
 """
 

@@ -459,9 +459,9 @@ class OpticalSetup(YamlSerializableMixin):
         >>> q0 = q0r + sp.I * q0i
         >>> q1 = ((A * q0 + B) / (C * q0 + D)).simplify()
         >>> jac = sp.simplify(sp.Matrix([sp.re(q1), sp.im(q1)]).jacobian(sp.Matrix([q0r, q0i])))
-        >>> print("jac[0,0].factor())
+        >>> print(jac[0,0].factor())
         -(A*D - B*C)*(C*q0.imag - C*q0.real - D)*(C*q0.imag + C*q0.real + D)/(C**2*q0.imag**2 + C**2*q0.real**2 + 2*C*D*q0.real + D**2)**2
-        >>> print("jac[0,1].factor())
+        >>> print(jac[0,1].factor())
         2*C*q0.imag*(A*D - B*C)*(C*q0.real + D)/(C**2*q0.imag**2 + C**2*q0.real**2 + 2*C*D*q0.real + D**2)**2
         >>> assert jac[0,0].factor() == jac[1,1].factor()
         >>> assert jac[1,0].factor() == -jac[0,1].factor()

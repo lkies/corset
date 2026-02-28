@@ -143,22 +143,22 @@ def plot_setup(  # noqa: C901
     Args:
         self: The optical setup instance.
         points: Number of points or specific z-coordinates to evaluate the beam profile.
-            If `None`, this defaults to :attr:`Config.PlotSetup.beam_points <corset.config.Config.PlotSetup.beam_points>`.
+            If ``None``, this defaults to :attr:`Config.PlotSetup.beam_points <corset.config.Config.PlotSetup.beam_points>`.
         limits: Z-coordinate limits for the plot.
-            If `None`, limits are determined from the beam and elements.
+            If ``None``, limits are determined from the beam and elements.
         beam_kwargs: Additional keyword arguments passed to the beam plot.
-            If `None` this defaults to :attr:`Config.PlotSetup.beam_kwargs <corset.config.Config.PlotSetup.beam_kwargs>`.
+            If ``None`` this defaults to :attr:`Config.PlotSetup.beam_kwargs <corset.config.Config.PlotSetup.beam_kwargs>`.
         confidence_interval: Confidence interval probability for beam uncertainty visualization.
-            If `False`, no uncertainty is plotted.
-            If `None` this defaults to :attr:`Config.PlotSetup.confidence_interval <corset.config.Config.PlotSetup.confidence_interval>`.
+            If ``False``, no uncertainty is plotted.
+            If ``None`` this defaults to :attr:`Config.PlotSetup.confidence_interval <corset.config.Config.PlotSetup.confidence_interval>`.
         rayleigh_range_cap: Maximum Rayleigh range to consider when determining plot limits.
-            If `None` this defaults to :attr:`Config.PlotSetup.rayleigh_range_cap <corset.config.Config.PlotSetup.rayleigh_range_cap>`.
+            If ``None`` this defaults to :attr:`Config.PlotSetup.rayleigh_range_cap <corset.config.Config.PlotSetup.rayleigh_range_cap>`.
         free_lenses: Indices of lenses to treat as free elements in the plot.
-        ax: The axes to plot on. If `None`, the current axes are used.
+        ax: The axes to plot on. If ``None``, the current axes are used.
         show_legend: Whether to show a legend for the plot.
-            If `None`, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
+            If ``None``, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
         legend_loc: Location of the legend in the plot.
-            If `None`, this defaults to :attr:`Config.PlotSetup.legend_loc <corset.config.Config.PlotSetup.legend_loc>`.
+            If ``None``, this defaults to :attr:`Config.PlotSetup.legend_loc <corset.config.Config.PlotSetup.legend_loc>`.
 
     Returns:
         An :class:`OpticalSetupPlot` containing references to the plot elements.
@@ -343,14 +343,14 @@ def plot_mode_match_solution_setup(
     Args:
         self: The mode matching solution instance.
         setup_kwargs: Additional keyword arguments passed to the setup plot function.
-            If `None`, this defaults to :attr:`Config.PlotSolution.setup_kwargs <corset.config.Config.PlotSolution.setup_kwargs>`.
+            If ``None``, this defaults to :attr:`Config.PlotSolution.setup_kwargs <corset.config.Config.PlotSolution.setup_kwargs>`.
         desired_kwargs: Additional keyword arguments passed to the desired beam plot function.
-            If `None`, this defaults to :attr:`Config.PlotSolution.desired_kwargs <corset.config.Config.PlotSolution.desired_kwargs>`.
-        ax: The axes to plot on. If `None`, the current axes are used.
+            If ``None``, this defaults to :attr:`Config.PlotSolution.desired_kwargs <corset.config.Config.PlotSolution.desired_kwargs>`.
+        ax: The axes to plot on. If ``None``, the current axes are used.
         show_legend: Whether to show a legend for the plot.
-            If `None`, this defaults to :attr:`Config.PlotSolution.show_legend <corset.config.Config.PlotSolution.show_legend>`.
+            If ``None``, this defaults to :attr:`Config.PlotSolution.show_legend <corset.config.Config.PlotSolution.show_legend>`.
         legend_loc: Location of the legend in the plot.
-            If `None`, this defaults to :attr:`Config.PlotSolution.legend_loc <corset.config.Config.PlotSolution.legend_loc>`.
+            If ``None``, this defaults to :attr:`Config.PlotSolution.legend_loc <corset.config.Config.PlotSolution.legend_loc>`.
     Returns:
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
@@ -495,19 +495,19 @@ def plot_reachability(
     Args:
         self: The mode matching solution instance.
         displacement: Maximum displacement from the optimal position(s) in meters.
-            If `None`, this defaults to :attr:`Config.PlotReachability.displacement <corset.config.Config.PlotReachability.displacement>`.
+            If ``None``, this defaults to :attr:`Config.PlotReachability.displacement <corset.config.Config.PlotReachability.displacement>`.
         num_samples: Number of samples to take along each dimension.
-            If `None`, this defaults to :attr:`Config.PlotReachability.num_samples <corset.config.Config.PlotReachability.num_samples>`.
+            If ``None``, this defaults to :attr:`Config.PlotReachability.num_samples <corset.config.Config.PlotReachability.num_samples>`.
         line_step: Step size to skip certain lines for increased smoothness while retaining clarity.
-            If `None`, this defaults to :attr:`Config.PlotReachability.line_step <corset.config.Config.PlotReachability.line_step>`.
-        dimensions: Indices of the dimensions to analyze. If `None`, all dimensions are used.
-        focus_range: Range of focus values to display on the x-axis. If `None`, determined automatically.
-        waist_range: Range of waist values to display on the y-axis. If `None`, determined automatically.
+            If ``None``, this defaults to :attr:`Config.PlotReachability.line_step <corset.config.Config.PlotReachability.line_step>`.
+        dimensions: Indices of the dimensions to analyze. If ``None``, all dimensions are used.
+        focus_range: Range of focus values to display on the x-axis. If ``None``, determined automatically.
+        waist_range: Range of waist values to display on the y-axis. If ``None``, determined automatically.
         confidence_interval: Confidence ellipse probability for focus position and waist radius.
-            If `None`, this defaults to :attr:`Config.PlotReachability.confidence_interval <corset.config.Config.PlotReachability.confidence_interval>`.
+            If ``None``, this defaults to :attr:`Config.PlotReachability.confidence_interval <corset.config.Config.PlotReachability.confidence_interval>`.
         grid_resolution: Resolution of the grid for the background mode overlap contour plot.
-            If `None`, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
-        ax: The axes to plot on. If `None`, the current axes are used.
+            If ``None``, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
+        ax: The axes to plot on. If ``None``, the current axes are used.
 
     Returns:
         A :class:`ReachabilityPlot` containing references to the plot elements.
@@ -629,24 +629,24 @@ def plot_sensitivity(
 
     Args:
         self: The mode matching solution instance.
-        dimensions: Indices of the dimensions to analyze. If `None`, the two least
+        dimensions: Indices of the dimensions to analyze. If ``None``, the two least
             coupled dimensions are used as the x and y dimensions, and the remaining most sensitive
             dimension is used as the auxiliary z dimension if applicable.
         worst_overlap: Worst-case mode overlap contour line that should still be fully visible in the
             plot used for automatic range determination.
-            If `None`, this defaults to :attr:`Config.PlotSensitivity.worst_overlap <corset.config.Config.PlotSensitivity.worst_overlap>`.
-        x_displacement: Displacement magnitude for x-axis values. If `None`, determined automatically from worst_overlap.
-        y_displacement: Displacement magnitude for y-axis values. If `None`, determined automatically from worst_overlap.
-        z_displacement: Displacement magnitude for z-axis values. If `None`, determined automatically from worst_overlap.
+            If ``None``, this defaults to :attr:`Config.PlotSensitivity.worst_overlap <corset.config.Config.PlotSensitivity.worst_overlap>`.
+        x_displacement: Displacement magnitude for x-axis values. If ``None``, determined automatically from worst_overlap.
+        y_displacement: Displacement magnitude for y-axis values. If ``None``, determined automatically from worst_overlap.
+        z_displacement: Displacement magnitude for z-axis values. If ``None``, determined automatically from worst_overlap.
         num_samples_z: Number of z-slices to plot if 3 dimensions are used.
-            If `None`, this defaults to :attr:`Config.PlotSensitivity.num_samples_z <corset.config.Config.PlotSensitivity.num_samples_z>`.
+            If ``None``, this defaults to :attr:`Config.PlotSensitivity.num_samples_z <corset.config.Config.PlotSensitivity.num_samples_z>`.
         confidence_interval: Confidence ellipse probability in terms of the required x and y displacements.
-            If `None`, this defaults to :attr:`Config.PlotSensitivity.confidence_interval <corset.config.Config.PlotSensitivity.confidence_interval>`.
-        force_contour_lines: If `True`, always use contour lines instead of filled contours for plots with two
-            degrees of freedom. If `None`, this defaults to :attr:`Config.PlotSensitivity.force_contour_lines <corset.config.Config.PlotSensitivity.force_contour_lines>`.
+            If ``None``, this defaults to :attr:`Config.PlotSensitivity.confidence_interval <corset.config.Config.PlotSensitivity.confidence_interval>`.
+        force_contour_lines: If ``True``, always use contour lines instead of filled contours for plots with two
+            degrees of freedom. If ``None``, this defaults to :attr:`Config.PlotSensitivity.force_contour_lines <corset.config.Config.PlotSensitivity.force_contour_lines>`.
         grid_resolution: Resolution of the grid for the contour plots.
-            If `None`, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
-        ax: The axes to plot on. If `None`, the current axes are used.
+            If ``None``, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
+        ax: The axes to plot on. If ``None``, the current axes are used.
 
     Returns:
         A :class:`SensitivityPlot` containing references to the plot elements.
@@ -766,17 +766,17 @@ def plot_mode_match_solution_all(
     Args:
         self: The mode matching solution instance.
         figsize: Figure size for the combined plot.
-            If `None`, this defaults to :attr:`Config.PlotAll.figsize <corset.config.Config.PlotAll.figsize>`.
+            If ``None``, this defaults to :attr:`Config.PlotAll.figsize <corset.config.Config.PlotAll.figsize>`.
         width_ratios: Width ratios for the three subplots.
-            If `None`, this defaults to :attr:`Config.PlotAll.width_ratios <corset.config.Config.PlotAll.width_ratios>`.
+            If ``None``, this defaults to :attr:`Config.PlotAll.width_ratios <corset.config.Config.PlotAll.width_ratios>`.
         tight_layout: Whether to use tight layout for the figure.
-            If `None`, this defaults to :attr:`Config.PlotAll.tight_layout <corset.config.Config.PlotAll.tight_layout>`.
+            If ``None``, this defaults to :attr:`Config.PlotAll.tight_layout <corset.config.Config.PlotAll.tight_layout>`.
         setup_kwargs: Additional keyword arguments for the setup plot.
-            If `None`, this defaults to :attr:`Config.PlotAll.setup_kwargs <corset.config.Config.PlotAll.setup_kwargs>`.
+            If ``None``, this defaults to :attr:`Config.PlotAll.setup_kwargs <corset.config.Config.PlotAll.setup_kwargs>`.
         reachability_kwargs: Additional keyword arguments for the reachability plot.
-            If `None`, this defaults to :attr:`Config.PlotAll.reachability_kwargs <corset.config.Config.PlotAll.reachability_kwargs>`.
+            If ``None``, this defaults to :attr:`Config.PlotAll.reachability_kwargs <corset.config.Config.PlotAll.reachability_kwargs>`.
         sensitivity_kwargs: Additional keyword arguments for the sensitivity plot.
-            If `None`, this defaults to :attr:`Config.PlotAll.sensitivity_kwargs <corset.config.Config.PlotAll.sensitivity_kwargs>`.
+            If ``None``, this defaults to :attr:`Config.PlotAll.sensitivity_kwargs <corset.config.Config.PlotAll.sensitivity_kwargs>`.
 
     Returns:
         A tuple containing the figure and an inner tuple with the three plot objects.

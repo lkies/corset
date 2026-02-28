@@ -718,6 +718,16 @@ def mode_match(
 
     Returns:
         A :class:`SolutionList` containing the optimized mode matching solutions.
+
+
+    .. note::
+        While most mode matching problems only have a single global optimum, some problems, especially
+        constrained mode matching problems may have local imperfect optima. Since the solver uses
+        a local optimization routine, it may not find the global optimum with the deterministic initial guesses.
+        To give the solver a better chance of finding a solution for a given candidate, it may attempt
+        the optimization with multiple random initial positions, specified by ``random_initial_positions``.
+        The number of initial guesses required to have a reasonable chance of finding an optimum (should
+        it exists) increases with the constraint and setup complexity.
     """
 
     # verify and prepare inputs

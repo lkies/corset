@@ -264,8 +264,8 @@ class ModeMatchingAnalysis:
 
         Args:
             sensitivity_unit: The unit to use for sensitivities in the summary.
-                If `False`, the raw sensitivities without unit conversion are used.
-                If `None` this defaults to :attr:`Config.sensitivity_unit <corset.config.Config.sensitivity_unit>`.
+                If ``False``, the raw sensitivities without unit conversion are used.
+                If ``None`` this defaults to :attr:`Config.sensitivity_unit <corset.config.Config.sensitivity_unit>`.
 
         Returns:
             A dictionary containing the summary data. The keys are:
@@ -322,8 +322,8 @@ class ModeMatchingAnalysis:
         """Create a summary DataFrame of the analysis results
 
         Args:
-            sensitivity_unit: The unit to use for sensitivities in the summary. If `None` the default from :class:`Config` is used.
-                If `False`, the raw sensitivities without unit conversion are used.
+            sensitivity_unit: The unit to use for sensitivities in the summary. If ``None`` the default from :class:`Config` is used.
+                If ``False``, the raw sensitivities without unit conversion are used.
 
         Returns:
             A DataFrame containing the summary data with one row per value, see :meth:`summary` for details.

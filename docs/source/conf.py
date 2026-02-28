@@ -74,6 +74,9 @@ from pathlib import Path
 
 
 def process_notebook(source: Path, output: Path):
+    if output.exists() and output.stat().st_mtime > source.stat().st_mtime:
+        return
+
     notebook = json.loads(source.read_text(encoding="utf-8"))
 
     for cell in notebook.get("cells", []):
