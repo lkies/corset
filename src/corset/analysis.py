@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
-from scipy.differentiate import hessian, jacobian
 
 from .config import Config
 
@@ -80,20 +79,37 @@ class ModeMatchingAnalysis:
         For problems with two degrees of freedom the Hessian is always negative definite, if there are
         more than two degrees of freedom it generally negative semi-definite with reduced rank or at least
         very bad conditioning.
+
+        Note:
+            The Hessian computation assumes, that the gradient of the overlap function is zero at the point
+            where it is computed. This mean the Hessian is only valid if the overlap is approximately 100%.
+            However this should not matter, since Hessian based metrics are only meaningful if computed
+            around a stationary point.
+        """
+        # derivation
+        """
+        >>> import sympy as sp
+        >>> focus, waist, desired_focus, desired_waist, wavelength = sp.symbols('focus waist desired_focus desired_waist wavelength', real=True)
+        >>> delta_z = focus - desired_focus
+        >>> overlap = 2 * sp.pi * waist * desired_waist / sp.sqrt(wavelength**2 * delta_z**2 + sp.pi**2 * (waist**2 + desired_waist**2) ** 2)
+        >>> hess = sp.simplify(sp.hessian(overlap, sp.Matrix([focus, waist])).subs({desired_focus: focus, desired_waist: waist}))
+        >>> print(hess)
+        Matrix([[-wavelength**2/(4*pi**2*waist**4), 0], [0, -1/waist**2]])
         """
 
-        mode_overlap = wrap_for_differentiate(
-            self.solution.candidate.parametrized_overlap  # pyright: ignore[reportArgumentType]
-        )
+        OVERLAP_THRESHOLD = 0.999  # noqa: N806
+        if self.solution.overlap < OVERLAP_THRESHOLD:
+            # the hessian based metrics are only meaningful if the setup is actually around a minimum
+            # additionally, the analytical hessian calculation will be incorrect since it assumes that
+            # the gradient is zero at the point to evaluate which is only true around stationary points
+            warnings.warn(
+                f"Imperfect mode overlap ({self.solution.overlap} < {OVERLAP_THRESHOLD} ≈ 1), Hessian based metrics may be meaningless.",
+                stacklevel=2,
+            )
 
-        # the default initial step is 0.5 which would lead to invalid lens position
-        # 1e-2 ensures, that only physical configurations are evaluated
-        tolerances = {"atol": 1e-6, "rtol": 1e-6}
-        hess_res = hessian(mode_overlap, self.solution.positions, initial_step=1e-2, tolerances=tolerances)
-        if np.any(hess_res.status != 0):
-            warnings.warn(f"Hessian calculation did not converge: {hess_res.status}", stacklevel=2)
-
-        return hess_res.ddf
+        db = self.solution.candidate.problem.desired_beam
+        base_hessian = np.diag([-db.wavelength**2 / (4 * np.pi**2 * db.waist**4), -1 / db.waist**2])
+        return self.focus_and_waist_jacobian.T @ base_hessian @ self.focus_and_waist_jacobian
 
     @cached_property
     def focus_and_waist_jacobian(self) -> np.ndarray:
@@ -105,12 +121,20 @@ class ModeMatchingAnalysis:
             j_{ij} = \left.\frac{\partial f_{fw,i}(\mathbf{x})}{\partial x_j} \right|_{\mathbf{x} = \mathbf{x}^*}
 
         """
-        # waist_and_focus = wrap_for_differentiate(make_focus_and_waist(self.solution))
-        waist_and_focus = wrap_for_differentiate(self.solution.candidate.parametrized_focus_and_waist)
-        jac_res = jacobian(waist_and_focus, self.solution.positions, initial_step=1e-2)
-        if np.any(jac_res.status != 0):
-            warnings.warn(f"Jacobian calculation did not converge: {jac_res.status}", stacklevel=2)
-        return jac_res.df
+        setup = self.solution.setup
+
+        jac_beam_parameter = setup._jac_ri_to_fw(setup.beam_parameters[-1], setup.initial_beam.wavelength)
+        jac_res = np.zeros((len(setup.elements), 2))
+
+        for i, (beam_before, (pos, element)) in reversed(
+            list(enumerate(zip(setup.beams[:-1], setup.elements, strict=True)))
+        ):
+            jac_res[i] += jac_beam_parameter @ np.array([-1, 0])
+            beam_param_before = beam_before.beam_parameter + (pos - beam_before.z_offset)
+            jac_beam_parameter = jac_beam_parameter @ setup._jac_ri_to_ri(beam_param_before, element.matrix)
+            jac_res[i] += jac_beam_parameter @ np.array([1, 0])
+
+        return jac_res[self.solution.candidate.parametrized_setup.free_elements].T
 
     @cached_property
     def couplings(self) -> np.ndarray:
