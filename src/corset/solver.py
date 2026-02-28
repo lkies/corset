@@ -517,11 +517,7 @@ class ModeMatchingCandidate(YamlSerializableMixin):
             if not res.success:
                 continue
 
-            sol = ModeMatchingSolution(
-                candidate=self,
-                overlap=-res.fun,
-                positions=res.x,
-            )
+            sol = ModeMatchingSolution(candidate=self, positions=res.x)
             if any(np.allclose(sol.positions, pos, atol=equal_setup_tol, rtol=0) for pos in solution_positions):
                 continue
             if filter_pred(sol):  # pyright: ignore[reportCallIssue]
@@ -551,8 +547,12 @@ class ModeMatchingSolution(YamlSerializableMixin):
     """
 
     candidate: ModeMatchingCandidate  #: The candidate that produced this solution
-    overlap: float  #: Mode overlap of the solution
     positions: np.ndarray  #: Positions of the lenses in the solution
+
+    @cached_property
+    def overlap(self) -> float:
+        """Mode overlap of the solution."""
+        return self.candidate.parametrized_overlap(self.positions)
 
     @property
     def setup(self) -> OpticalSetup:
@@ -606,11 +606,7 @@ class ModeMatchingSolution(YamlSerializableMixin):
         )
 
         res = optimize.minimize(
-            lambda x: ModeMatchingSolution(
-                candidate=self.candidate,
-                overlap=1,
-                positions=x,
-            ).analysis.min_coupling,
+            lambda x: ModeMatchingSolution(candidate=self.candidate, positions=x).analysis.min_coupling,
             self.positions,
             constraints=[*self.candidate.constraints, mode_matching_constraint],
         )
@@ -618,12 +614,7 @@ class ModeMatchingSolution(YamlSerializableMixin):
         if not res.success:
             return None
 
-        mode_matching = self.candidate.parametrized_overlap(res.x)
-        new_solution = ModeMatchingSolution(
-            candidate=self.candidate,
-            overlap=mode_matching,
-            positions=res.x,
-        )
+        new_solution = ModeMatchingSolution(candidate=self.candidate, positions=res.x)
         old_coupling = self.analysis.min_coupling
         new_coupling = new_solution.analysis.min_coupling
         if (old_coupling - new_coupling) > min_abs_improvement or new_coupling / old_coupling < min_rel_improvement:
