@@ -97,13 +97,14 @@ class ModeMatchingAnalysis:
         Matrix([[-wavelength**2/(4*pi**2*waist**4), 0], [0, -1/waist**2]])
         """
 
-        OVERLAP_THRESHOLD = 0.999  # noqa: N806
-        if self.solution.overlap < OVERLAP_THRESHOLD:
+        from .solver import PERFECT_OVERLAP
+
+        if self.solution.overlap < PERFECT_OVERLAP:
             # the hessian based metrics are only meaningful if the setup is actually around a minimum
             # additionally, the analytical hessian calculation will be incorrect since it assumes that
             # the gradient is zero at the point to evaluate which is only true around stationary points
             warnings.warn(
-                f"Imperfect mode overlap ({self.solution.overlap} < {OVERLAP_THRESHOLD} ≈ 1), Hessian based metrics may be meaningless.",
+                f"Imperfect mode overlap ({self.solution.overlap} < {PERFECT_OVERLAP} ≈ 1), Hessian based metrics may be meaningless.",
                 stacklevel=2,
             )
 

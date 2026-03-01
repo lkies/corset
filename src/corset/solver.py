@@ -10,6 +10,7 @@ The actual constrained optimization is carried out using :func:`scipy.optimize.m
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
 """
 
+import warnings
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -30,6 +31,10 @@ from .plot import (
     plot_sensitivity,
 )
 from .serialize import YamlSerializableMixin
+
+PERFECT_OVERLAP = 0.999
+"""Threshold above which the overlap between two beams is considered
+to be perfect within numerical precision."""
 
 
 @dataclass(frozen=True)
@@ -457,7 +462,6 @@ class ModeMatchingCandidate(YamlSerializableMixin):
         equal_setup_tol: float,
         max_solutions: int,
         rng: np.random.Generator = np.random.default_rng(),  # noqa: B008
-        # optimize_coupling: bool,
     ) -> list["ModeMatchingSolution"]:
         """Optimize the candidate to find mode matching solutions.
 
@@ -524,17 +528,6 @@ class ModeMatchingCandidate(YamlSerializableMixin):
                 solutions.append(sol)
                 solution_positions.append(sol.positions)
 
-            # if optimize_coupling and sol.overlap >= 1 - 1e-3 and len(solutions) < solution_per_population:
-            #     improved_sol = sol.optimize_coupling()
-            #     if improved_sol is not None and filter_pred(improved_sol):  # pyright: ignore[reportCallIssue]
-            #         if any(
-            #             np.allclose(improved_sol.positions, pos, atol=equal_setup_tol, rtol=0)
-            #             for pos in solution_positions
-            #         ):
-            #             continue
-            #         solutions.append(improved_sol)
-            #         solution_positions.append(improved_sol.positions)
-
         return solutions
 
 
@@ -576,13 +569,24 @@ class ModeMatchingSolution(YamlSerializableMixin):
         return analysis.ModeMatchingAnalysis(solution=self)
 
     def optimize_coupling(
-        self, min_abs_improvement: float = 0.1, min_rel_improvement: float = 0.5
+        self,
+        dimensions: tuple[int, int] | None = None,
+        min_abs_improvement: float = 0.1,
+        min_rel_improvement: float = 0.5,
     ) -> "ModeMatchingSolution | None":
-        """Optimize the solution to reduce coupling between least coupled pair while maintaining mode matching.
+        """Optimize the solution to reduce coupling between least coupled pair or any other pair
+        while maintaining mode matching, returning a new solution if the coupling could be optimized
+        significantly.
 
-        Note that this requires at least 3 elements so that there is at least one degree of freedom left after mode matching.
+        .. note::
+            This requires that there are at least three elements so that there is at least one degree
+            of freedom left after ensuring perfect mode overlap. If there are fewer degrees of freedom,
+            the it is impossible for the coupling to be improved and the function will always return
+            ``None``.
 
         Args:
+            dimensions: The indices of the degrees of freedom for which the coupling should be optimized.
+                If ``None``, the minimum of all couplings is optimized.
             min_abs_improvement: Minimum absolute improvement in coupling to return the new solution.
             min_rel_improvement: Minimum relative improvement in coupling to return the new solution.
 
@@ -590,13 +594,13 @@ class ModeMatchingSolution(YamlSerializableMixin):
             A new :class:`ModeMatchingSolution` with improved coupling if successful, otherwise None.
 
         Raises:
-            ValueError: If there are not enough free parameters or if the solution does not have ~100% mode overlap.
+            ValueError: If the solution does not have ~100% mode overlap.
         """
 
         if not len(self.positions) > 2:
             return None
             # raise ValueError("Need at least 3 free parameters to optimize coupling.")
-        if self.overlap < 1 - 1e-3:
+        if self.overlap < PERFECT_OVERLAP:
             raise ValueError("Can only optimize coupling for solutions ~100% mode overlap.")
 
         desired_beam = self.candidate.problem.desired_beam
@@ -605,11 +609,21 @@ class ModeMatchingSolution(YamlSerializableMixin):
             lambda x: self.candidate.parametrized_focus_and_waist(x) - desired_focus_and_waist, [0, 0], [0, 0]
         )
 
-        res = optimize.minimize(
-            lambda x: ModeMatchingSolution(candidate=self.candidate, positions=x).analysis.min_coupling,
-            self.positions,
-            constraints=[*self.candidate.constraints, mode_matching_constraint],
-        )
+        objective = lambda x: ModeMatchingSolution(candidate=self.candidate, positions=x).analysis.min_coupling
+        if dimensions is not None:
+            # make sure the iterable is actually a tuple in case someone decides to pass a list
+            dimensions = tuple(dimensions)  # pyright: ignore[reportAssignmentType]
+            objective = lambda x: np.abs(
+                ModeMatchingSolution(candidate=self.candidate, positions=x).analysis.couplings[dimensions]
+            )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", r"Imperfect mode overlap \(.*\), Hessian based metrics may be meaningless."
+            )
+            res = optimize.minimize(
+                objective, self.positions, constraints=[*self.candidate.constraints, mode_matching_constraint]
+            )
 
         if not res.success:
             return None
@@ -691,12 +705,11 @@ def mode_match(
     min_elements: int = 1,
     max_elements: int = float("inf"),  # pyright: ignore[reportArgumentType]
     constraints: Sequence[Aperture | Passage] = [],
-    filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = 0.999,  # allow for some numerical error
+    filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = PERFECT_OVERLAP,
     random_initial_positions: int = 0,
     solutions_per_candidate: int = 1,
     equal_setup_tol: float = 1e-3,
     random_seed: int = 0,
-    # optimize_coupling: bool = False,
     # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
     # TODO other solver options
 ):
