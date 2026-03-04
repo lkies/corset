@@ -10,11 +10,13 @@ The actual constrained optimization is carried out using :func:`scipy.optimize.m
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
 """
 
+import hashlib
 import warnings
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import combinations_with_replacement, pairwise
+from pathlib import Path
 from typing import Any, cast, overload
 
 import numpy as np
@@ -710,6 +712,7 @@ def mode_match(
     solutions_per_candidate: int = 1,
     equal_setup_tol: float = 1e-3,
     random_seed: int = 0,
+    cache_dir: Path | None = None,
     # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
     # TODO other solver options
 ):
@@ -728,9 +731,15 @@ def mode_match(
         solutions_per_candidate: Maximum number of solutions to optimize and return per candidate i.e. lens population.
         equal_setup_tol: Tolerance for considering two solutions as equal for eliminating duplicates.
         random_seed: Random seed for reproducibility.
+        cache_dir: If this is not ``None`` cached solutions and look for cached solutions in the
+            provide directory. The cached is unbounded.
 
     Returns:
         A :class:`SolutionList` containing the optimized mode matching solutions.
+
+    Raises:
+        ValueError: If caching is requested but the filter predicate is not a float, i.e. a function object.
+        ValueError: If the mode matching problem is invalid, e.g contains out of order or overlapping parts.
 
 
     .. note::
@@ -742,6 +751,16 @@ def mode_match(
         The number of initial guesses required to have a reasonable chance of finding an optimum (should
         it exists) increases with the constraint and setup complexity.
     """
+    if cache_dir:
+        if not isinstance(filter_pred, float):
+            raise ValueError("Caching is not supported when `filter_pred` is not a float.")
+        cache_dir = Path(cache_dir)
+        args = locals().copy()
+        args.pop("cache_dir")
+        args_hash = hashlib.md5(repr(sorted(args.items())).encode()).hexdigest()  # noqa: S324
+        cache_file = cache_dir / f"{args_hash}.yaml"
+        if cache_file.exists():
+            return SolutionList.load_yaml(cache_file)
 
     # verify and prepare inputs
     if isinstance(setup, Beam):
@@ -779,7 +798,13 @@ def mode_match(
             )
         )
 
-    return SolutionList(solutions)
+    res = SolutionList(solutions)
+
+    if cache_dir:
+        cache_file.parent.mkdir(exist_ok=True)
+        res.save_yaml(cache_file)
+
+    return res
 
     # TODO some sanity checks to ensure the desired beam is after the last setup part
     # TODO other checks like non overlapping regions
