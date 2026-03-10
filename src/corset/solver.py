@@ -713,6 +713,7 @@ def mode_match(
     equal_setup_tol: float = 1e-3,
     random_seed: int = 0,
     cache_dir: Path | None = None,
+    tqdm_kwargs: dict = {"desc": "Optimizing Candidates", "delay": 2, "smoothing": 1e-2},  # noqa: B006
     # pure_constraints: bool = False,  # TODO also give constraints a slight weight when there are excess degrees of freedom
     # TODO other solver options
 ):
@@ -733,6 +734,7 @@ def mode_match(
         random_seed: Random seed for reproducibility.
         cache_dir: If this is not ``None`` cached solutions and look for cached solutions in the
             provide directory. The cached is unbounded.
+        tqdm_args: Arguments for the tqdm progress bar.
 
     Returns:
         A :class:`SolutionList` containing the optimized mode matching solutions.
@@ -751,12 +753,18 @@ def mode_match(
         The number of initial guesses required to have a reasonable chance of finding an optimum (should
         it exists) increases with the constraint and setup complexity.
     """
+    from tqdm import TqdmExperimentalWarning
+
+    warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
+    from tqdm.autonotebook import tqdm
+
     if cache_dir:
         if not isinstance(filter_pred, float):
             raise ValueError("Caching is not supported when `filter_pred` is not a float.")
         cache_dir = Path(cache_dir)
         args = locals().copy()
         args.pop("cache_dir")
+        args.pop("tqdm_args")
         args_hash = hashlib.md5(repr(sorted(args.items())).encode()).hexdigest()  # noqa: S324
         cache_file = cache_dir / f"{args_hash}.yaml"
         if cache_file.exists():
@@ -786,7 +794,7 @@ def mode_match(
 
     solutions = []
     # TODO parallelize this loop?
-    for candidate in problem.candidates():
+    for candidate in tqdm(problem.candidates(), **(tqdm_kwargs | {"total": sum(1 for _ in problem.candidates())})):
         solutions.extend(
             candidate.optimize(
                 filter_pred=filter_pred,  # pyright: ignore[reportArgumentType]
@@ -794,7 +802,6 @@ def mode_match(
                 equal_setup_tol=equal_setup_tol,
                 max_solutions=solutions_per_candidate,
                 rng=rng,
-                # optimize_coupling=optimize_coupling,
             )
         )
 
