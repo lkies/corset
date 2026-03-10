@@ -674,6 +674,17 @@ class SolutionList(YamlSerializableMixin):
     def _repr_html_(self) -> str:
         return self.df.to_html(notebook=True)
 
+    def filter(self, predicate: Callable[[ModeMatchingSolution], bool]) -> "SolutionList":
+        """Filter solutions based on a predicate function.
+
+        Args:
+            predicate: A function that takes a :class:`ModeMatchingSolution` and returns a boolean.
+
+        Returns:
+            A new :class:`SolutionList` containing only the solutions for which the predicate returns ``True``.
+        """
+        return SolutionList(solutions=[sol for sol in self.solutions if predicate(sol)])
+
     def query(self, expr: str) -> "SolutionList":
         """Filter solutions based on a :meth:`pandas.DataFrame.query` expression applied to the DataFrame representation.
 
@@ -685,17 +696,32 @@ class SolutionList(YamlSerializableMixin):
         """
         return self[cast(list[int], self.df.query(expr).index)]
 
-    def sort_values(self, by: str | list[str], ascending: bool = True) -> "SolutionList":
+    def sorted(self, key: Callable[[ModeMatchingSolution], float], reverse: bool = False) -> "SolutionList":
+        """Sort solutions based on a key function.
+
+        Args:
+            key: A function that takes a :class:`ModeMatchingSolution` and returns a float for sorting.
+            reverse: Whether to sort in descending order.
+
+        Returns:
+            A new :class:`SolutionList` with solutions sorted by the specified key.
+        """
+        return SolutionList(solutions=sorted(self.solutions, key=key, reverse=reverse))
+
+    def sort_values(
+        self, by: str | list[str], *, ascending: bool = True, key: Callable[[pd.Series], pd.Series] | None = None
+    ) -> "SolutionList":
         """Sort solutions based on a column or list of columns in the DataFrame representation.
 
         Args:
             by: Column name or list of column names to sort by.
             ascending: Whether to sort in ascending order.
+            key: Optional callable to transform the column values before sorting, see :meth:`pandas.DataFrame.sort_values` for details.
 
         Returns:
             A new :class:`SolutionList` with solutions sorted by the specified columns.
         """
-        return self[cast(list[int], self.df.sort_values(by=by, ascending=ascending).index)]
+        return self[cast(list[int], self.df.sort_values(by=by, ascending=ascending, key=key).index)]
 
 
 # TODO should this be a method of ModeMatchingProblem?

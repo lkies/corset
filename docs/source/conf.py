@@ -31,6 +31,7 @@ extensions = [
 ]
 
 intersphinx_mapping = {
+    "python": ("https://docs.python.org/3/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
@@ -68,7 +69,7 @@ html_favicon = "../../misc/logo/favicon.svg"
 
 
 ### Preprocess notebooks for RST compatibility
-# TODO move this to a separate script and check timestamps to only preprocess when necessary
+# TODO move this to a separate script
 import json
 from pathlib import Path
 
