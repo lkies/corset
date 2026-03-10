@@ -269,27 +269,28 @@ class ModeMatchingAnalysis:
                 If ``None`` this defaults to :attr:`Config.sensitivity_unit <corset.config.Config.sensitivity_unit>`.
 
         Returns:
-            A dictionary containing the summary data. The keys are:
-            - "overlap": The mode overlap of the solution.
-            - "num_elements": The number of free elements (i.e. elements used for mode matching) in the setup.
-            - "elements": A list of the free elements (i.e. elements used for mode matching) in the setup.
-            - "positions": The positions of the free elements in the setup.
-            - "min_sensitivity_axis": The index of the degree of freedom with minimal sensitivity.
-            - "min_sensitivity": The minimal sensitivity in the specified unit.
-            - "max_sensitivity_axis": The index of the degree of freedom with maximal sensitivity.
-            - "max_sensitivity": The maximal sensitivity in the specified unit.
-            - "min_cross_sens_pair": The indices of the pair of degrees of freedom with minimal cross-sensitivity.
-            - "min_cross_sens": The minimal cross-sensitivity in the specified unit.
-            - "min_cross_sens_direction": The direction of the least cross-sensitive pair of degrees of freedom.
-            - "min_coupling_pair": The indices of the pair of degrees of freedom with minimal coupling.
-            - "min_coupling": The minimal coupling.
-            - "sensitivities": The sensitivity matrix in the specified unit.
-            - "couplings": The coupling matrix.
-            - "const_space": The basis vectors spanning the constant overlap sub-space.
-            - "grad_focus": The gradient of the final beam focus with respect to the element positions.
-            - "grad_waist": The gradient of the final beam waist with respect to the element positions.
-            - "sensitivity_unit": The sensitivity unit used.
-            - "solution": The analyzed mode matching solution.
+            A dictionary containing the summary data. The keys are
+
+            - ``"overlap"``: The mode overlap of the solution.
+            - ``"num_elements"``: The number of free elements (i.e. elements used for mode matching) in the setup.
+            - ``"elements"``: A list of the free elements (i.e. elements used for mode matching) in the setup.
+            - ``"positions"``: The positions of the free elements in the setup.
+            - ``"min_sensitivity_axis"``: The index of the degree of freedom with minimal sensitivity.
+            - ``"min_sensitivity"``: The minimal sensitivity in the specified unit.
+            - ``"max_sensitivity_axis"``: The index of the degree of freedom with maximal sensitivity.
+            - ``"max_sensitivity"``: The maximal sensitivity in the specified unit.
+            - ``"min_cross_sens_pair"``: The indices of the pair of degrees of freedom with minimal cross-sensitivity.
+            - ``"min_cross_sens"``: The minimal cross-sensitivity in the specified unit.
+            - ``"min_cross_sens_direction"``: The direction of the least cross-sensitive pair of degrees of freedom.
+            - ``"min_coupling_pair"``: The indices of the pair of degrees of freedom with minimal coupling.
+            - ``"min_coupling"``: The minimal coupling.
+            - ``"sensitivities"``: The sensitivity matrix in the specified unit.
+            - ``"couplings"``: The coupling matrix.
+            - ``"const_space"``: The basis vectors spanning the constant overlap sub-space.
+            - ``"grad_focus"``: The gradient of the final beam focus with respect to the element positions.
+            - ``"grad_waist"``: The gradient of the final beam waist with respect to the element positions.
+            - ``"sensitivity_unit"``: The sensitivity unit used.
+            - ``"solution"``: The analyzed mode matching solution.
 
         """
 
