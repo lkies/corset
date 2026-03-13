@@ -104,6 +104,7 @@ class ModeMatchingPlot:
     ranges: list[Rectangle]  #: List of ranges in the plot
     apertures: list[Line2D]  #: List of aperture lines in the plot
     passages: list[Rectangle]  #: List of passage rectangles in the plot
+    focuses: list[Line2D]  #: List of focus diamonds in the plot
     handles: list[tuple[Any, str]]  #: List of plot handles by their legend labels
 
 
@@ -329,7 +330,7 @@ def plot_setup(  # noqa: C901
     )
 
 
-def plot_mode_match_solution_setup(
+def plot_mode_match_solution_setup(  # noqa: C901
     self: "ModeMatchingSolution",
     *,
     setup_kwargs: dict | None = None,
@@ -355,7 +356,7 @@ def plot_mode_match_solution_setup(
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
     from .core import OpticalSetup
-    from .solver import Aperture, Passage
+    from .solver import Aperture, Focus, Passage
 
     ax = ax or plt.gca()
     setup_kwargs = Config.get(setup_kwargs, Config.PlotSolution.setup_kwargs)
@@ -403,6 +404,7 @@ def plot_mode_match_solution_setup(
 
     apertures = []
     passages = []
+    focuses = []
     for con in problem.constraints:
         if isinstance(con, Aperture):
             apertures.extend(
@@ -417,6 +419,10 @@ def plot_mode_match_solution_setup(
                 ec="none",
             )
             passages.append(ax.add_patch(rect))
+        elif isinstance(con, Focus):
+            focuses.append(ax.scatter(con.position, 0, marker="d", s=100, color="C4", zorder=120))
+        else:
+            raise ValueError(f"Unsupported constraint type: {type(con)}")  # noqa: TRY004
 
     if apertures:
         # TODO add dots to vertical line?
@@ -425,6 +431,10 @@ def plot_mode_match_solution_setup(
         )
     if passages:
         handles.append((passages[0], "Passage"))
+    if focuses:
+        handles.append(  # fake handle with regular size
+            (Line2D([], [], color="C4", label="Focus", marker="d", linestyle="None"), "Focus")
+        )
 
     if show_legend:
         ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
@@ -438,6 +448,7 @@ def plot_mode_match_solution_setup(
         ranges=ranges,
         apertures=apertures,
         passages=passages,
+        focuses=focuses,
         handles=handles,
     )
 

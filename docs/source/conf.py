@@ -71,7 +71,10 @@ html_favicon = "../../misc/logo/favicon.svg"
 ### Preprocess notebooks for RST compatibility
 # TODO move this to a separate script
 import json
+import os
 from pathlib import Path
+
+os.environ["TQDM_DISABLE"] = "1"
 
 
 def process_notebook(source: Path, output: Path):

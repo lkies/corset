@@ -11,6 +11,7 @@ All solutions will then be collected in a :class:`SolutionList` for convenient a
 """
 
 import hashlib
+import os
 import warnings
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
@@ -176,6 +177,20 @@ class Passage(YamlSerializableMixin):
         return [(self.left, normalized_radius), (self.right, normalized_radius)]
 
 
+@dataclass(frozen=True)
+class Focus(YamlSerializableMixin):
+    """Focus constraint for a mode matching problem.
+    Constrains the beam to have a focus of any ways at a specified position.
+
+    .. note::
+        Unlike the other constraints, this is an equality constraint. This means
+        it "costs" an additional degree of freedom for it to be satisfied while
+        maintaining perfect mode matching.
+    """
+
+    position: float  #: Position of the focus
+
+
 # TODO should this be a member of Beam?
 def mode_overlap(delta_z: float, waist_a: float, waist_b: float, wavelength: float) -> float:
     """Compute the mode overlap between two Gaussian beams.
@@ -204,7 +219,7 @@ class ModeMatchingProblem(YamlSerializableMixin):
     selection: Sequence[Lens]  #: Selection of lenses to choose from for mode matching
     min_elements: int  #: Minimum number of elements to use
     max_elements: int  #: Maximum number of elements to use
-    constraints: Sequence[Aperture | Passage]  #: Beam constraints on the optical setup
+    constraints: Sequence[Aperture | Passage | Focus]  #: Beam constraints on the optical setup
 
     # TODO maybe also verify that there is a combination of lenses that can fit in the ranges?
     def __post_init__(self):
@@ -236,7 +251,7 @@ class ModeMatchingProblem(YamlSerializableMixin):
         regions: list[tuple[float, float, Any]] = []  # left right
         regions.extend((pos, pos, element) for pos, element in self.setup.elements)
         regions.extend((range_.left, range_.right, range_) for range_ in self.ranges)
-        regions.extend((ap.position, ap.position, ap) for ap in self.radius_constraints if isinstance(ap, Aperture))
+        regions.extend((c.position, c.position, c) for c in self.constraints if isinstance(c, (Aperture, Focus)))
         regions.extend((pas.left, pas.right, pas) for pas in self.constraints if isinstance(pas, Passage))
         regions.sort(key=lambda x: x[0])
         for r1, r2 in pairwise(regions):
@@ -244,9 +259,18 @@ class ModeMatchingProblem(YamlSerializableMixin):
                 raise ValueError(f"Overlapping regions/elements detected: {r1[2]} and {r2[2]}.")
 
     @cached_property
-    def radius_constraints(self) -> list[tuple[float, float]]:
+    def raw_radius_constraints(self) -> list[tuple[float, float]]:
         """List of all constraints as :math:`1/e` beam radius constraint tuples (position, radius)."""
-        return [con for constraint in self.constraints for con in constraint.radius_constraints]
+        return [
+            con
+            for constraint in self.constraints
+            if isinstance(constraint, (Aperture, Passage))
+            for con in constraint.radius_constraints
+        ]
+
+    @cached_property
+    def raw_focus_constraints(self) -> list[float]:
+        return [con.position for con in self.constraints if isinstance(con, Focus)]
 
     @cached_property
     def interleaved_elements(self) -> list[tuple[float, Lens] | int]:
@@ -412,17 +436,34 @@ class ModeMatchingCandidate(YamlSerializableMixin):
         )
 
     @cached_property
-    def beam_constraint(self) -> optimize.NonlinearConstraint:
+    def radius_constraint(self) -> optimize.NonlinearConstraint:
         """Nonlinear constraint to ensure beam radius is within aperture constraints."""
-        zs, rs = np.transpose(self.problem.radius_constraints)
+        zs, rs = np.transpose(self.problem.raw_radius_constraints)
         return optimize.NonlinearConstraint(
-            lambda x, zs=zs, rs=rs, s=self.parametrized_setup: s.substitute(x, validate=False).radius(zs) / rs, 0, 1
+            lambda x: self.parametrized_setup.substitute(x, validate=False).radius(zs) / rs, 0, 1
         )
 
     @cached_property
+    def focus_constraint(self) -> optimize.NonlinearConstraint:
+        """Nonlinear constraints to ensure focus positions meet specified constraints."""
+
+        focus_positions = np.array(self.problem.raw_focus_constraints)
+
+        def constraint(x: np.ndarray) -> np.ndarray:
+            substituted = self.parametrized_setup.substitute(x, validate=False)
+            beam_index = np.searchsorted([pos for pos, _ in substituted.elements], focus_positions)
+            return np.array([substituted.beams[i].focus for i in beam_index]) - focus_positions
+
+        return optimize.NonlinearConstraint(constraint, 0, 0)
+
+    @cached_property
     def constraints(self) -> list[optimize.NonlinearConstraint | optimize.LinearConstraint]:
-        """List of position constraints and beam constraints if there are any."""
-        return [self.position_constraint] + ([self.beam_constraint] if self.problem.constraints else [])
+        """List of position constraint and potential beam constraint and focus constraints if there are any."""
+        return (
+            [self.position_constraint]
+            + ([self.radius_constraint] if self.problem.raw_radius_constraints else [])
+            + ([self.focus_constraint] if self.problem.raw_focus_constraints else [])
+        )
 
     def parametrized_overlap(self, positions: np.ndarray) -> float:
         """Compute the mode overlap depending on the free element positions.
@@ -503,15 +544,15 @@ class ModeMatchingCandidate(YamlSerializableMixin):
             if len(solutions) >= max_solutions:
                 break
 
-            if self.problem.constraints:
+            if self.problem.raw_radius_constraints:
                 constrain_res = optimize.minimize(
-                    lambda x: np.max(self.beam_constraint.fun(x)),
+                    lambda x: np.max(self.radius_constraint.fun(x)),
                     x0,
                     constraints=[self.position_constraint],
                     method="SLSQP",
                     options={"ftol": 2e-1},
                 )
-                if not np.all(self.beam_constraint.fun(constrain_res.x) <= self.beam_constraint.ub) or any(
+                if not np.all(self.radius_constraint.fun(constrain_res.x) <= self.radius_constraint.ub) or any(
                     not np.allclose(constrain_res.x, x0) for x0 in constrained_initial_setups
                 ):
                     # failed to converge to a feasible setup or already tried this setup
@@ -732,7 +773,7 @@ def mode_match(
     selection: Sequence[Lens] = [],
     min_elements: int = 1,
     max_elements: int = float("inf"),  # pyright: ignore[reportArgumentType]
-    constraints: Sequence[Aperture | Passage] = [],
+    constraints: Sequence[Aperture | Passage | Focus] = [],
     filter_pred: Callable[[ModeMatchingSolution], bool] | float | None = PERFECT_OVERLAP,
     random_initial_positions: int = 0,
     solutions_per_candidate: int = 1,
@@ -819,8 +860,17 @@ def mode_match(
     rng = np.random.default_rng(random_seed)
 
     solutions = []
+
+    tqdm_kwargs = (
+        # unlike the regular tqdm, tqdm_notebook does not respect the TQDM_[...] environment
+        # variable based defaults so we manually reimplement this to suppress tqdm in docs
+        {"disable": bool(os.environ.get("TQDM_DISABLE", False))}
+        | tqdm_kwargs
+        | {"total": sum(1 for _ in problem.candidates())}
+    )
+
     # TODO parallelize this loop?
-    for candidate in tqdm(problem.candidates(), **(tqdm_kwargs | {"total": sum(1 for _ in problem.candidates())})):
+    for candidate in tqdm(problem.candidates(), **tqdm_kwargs):
         solutions.extend(
             candidate.optimize(
                 filter_pred=filter_pred,  # pyright: ignore[reportArgumentType]

@@ -6,6 +6,7 @@ from .database import LensList  # noqa: F401
 from .serialize import load_yaml, save_yaml  # noqa: F401
 from .solver import (  # noqa: F401
     Aperture,
+    Focus,
     ModeMatchingSolution,
     Passage,
     ShiftingRange,
