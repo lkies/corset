@@ -26,6 +26,7 @@ Try Beam Corset in your browser with [JupyterLite](https://lkies.github.io/corse
 - Documentation: <https://lkies.github.io/corset>
 - Source Code: <https://github.com/lkies/corset>
 - Issue Tracker: <https://github.com/lkies/corset/issues>
+- PyPI: <https://pypi.org/project/beam-corset/>
 - JupyterLite: <https://lkies.github.io/corset/jp-lite>
 
 ## Information for Developers

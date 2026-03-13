@@ -36,6 +36,7 @@ Links
 - Documentation: https://lkies.github.io/corset
 - Source Code: https://github.com/lkies/corset
 - Issue Tracker: https://github.com/lkies/corset/issues
+- PyPI: https://pypi.org/project/beam-corset
 - JupyterLite: https://lkies.github.io/corset/jp-lite
 
 

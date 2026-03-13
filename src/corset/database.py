@@ -16,12 +16,12 @@ There are also combined databases, where the manufacturer and lens type are repl
 
 The lens type shorthands are as follows:
 
-- ``BX``: Bi-Convex
-- ``BV``: Bi-Concave
-- ``PX``: Plan-Convex
-- ``XP``: Convex-Plan
-- ``PV``: Plan-Concave
-- ``VP``: Concave-Plan
+- ``BX`` : Bi-Convex
+- ``BV`` : Bi-Concave
+- ``PX`` : Plan-Convex
+- ``XP`` : Convex-Plan
+- ``PV`` : Plan-Concave
+- ``VP`` : Concave-Plan
 
 The lenses in these databases adhere to the following conventions:
 
@@ -30,7 +30,7 @@ The lenses in these databases adhere to the following conventions:
     [first letter of manufacturer][lens type][nominal focal length in mm]
 
 so a Thorlabs bi-convex lens with a nominal focal length of 50 mm is named ``TBX50``.
-This keeps the name short for plotting and to make it easier to index into the lens list by name.
+This keeps the name short for plotting and makes it easier to index into lens lists by name.
 """
 
 from collections.abc import Iterable, Iterator
