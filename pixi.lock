@@ -2087,8 +2087,8 @@ packages:
   timestamp: 1767044989890
 - pypi: ./
   name: beam-corset
-  version: 0.3.1
-  sha256: e999bce97e6e99b5be3698499ca492a5f6c087e85fd28b8a7b783818391cd2fa
+  version: 0.4.0
+  sha256: 7d2a114217d862479e63d949d6624d4686a5058b5639068ee77988cb7b08e1c6
   requires_dist:
   - numpy>=2.3.4,<3
   - scipy>=1.16.3,<2
