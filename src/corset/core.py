@@ -188,14 +188,14 @@ class ThinLens(YamlSerializableMixin):
         return np.array([[1, 0], [-1 / self.focal_length, 1]])
 
     def __str__(self) -> str:
-        return self.name if self.name is not None else f"f={round(self.focal_length*1e3)}mm"
+        return self.name if self.name is not None else f"f={round(self.focal_length * 1e3)}mm"
 
 
 @dataclass(frozen=True)
 class ThickLens(YamlSerializableMixin):
     """Thick lens element including additional information.
 
-    The signs of the radius of curvature follow the standard optics convention where positive radii
+    The signs of the radii of curvature follow the standard optics convention where positive radii
     correspond to surfaces that are convex when viewed from the input side of the lens. This means
     that on the entry surface, a positive radius of curvature is a convex surface while on the exit surface,
     a negative radius of curvature is convex.
@@ -240,7 +240,7 @@ class ThickLens(YamlSerializableMixin):
         return 1 / ((n2 - 1) * (1 / r1 - 1 / r2 + ((n2 - 1) * self.thickness) / (n2 * r1 * r2)))
 
     def __str__(self) -> str:
-        return self.name if self.name is not None else f"f≈{round(self.focal_length*1e3)}mm"
+        return self.name if self.name is not None else f"f≈{round(self.focal_length * 1e3)}mm"
 
 
 Lens = ThinLens | ThickLens  #: Lens type union

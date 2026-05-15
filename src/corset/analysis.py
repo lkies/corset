@@ -109,7 +109,7 @@ class ModeMatchingAnalysis:
             )
 
         db = self.solution.candidate.problem.desired_beam
-        base_hessian = np.diag([-db.wavelength**2 / (4 * np.pi**2 * db.waist**4), -1 / db.waist**2])
+        base_hessian = np.diag([-(db.wavelength**2) / (4 * np.pi**2 * db.waist**4), -1 / db.waist**2])
         return self.focus_and_waist_jacobian.T @ base_hessian @ self.focus_and_waist_jacobian
 
     @cached_property

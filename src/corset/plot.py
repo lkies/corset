@@ -32,8 +32,8 @@ if TYPE_CHECKING:
 
 RELATIVE_MARGIN = 0.1  #: Relative margin size for plotting optical setups
 
-milli_formatter = FuncFormatter(lambda x, _: f"{x*1e3:.0f}")  #: Formatter for millimeter axes
-micro_formatter = FuncFormatter(lambda x, _: f"{x*1e6:.0f}")  #: Formatter for micrometer axes
+milli_formatter = FuncFormatter(lambda x, _: f"{x * 1e3:.0f}")  #: Formatter for millimeter axes
+micro_formatter = FuncFormatter(lambda x, _: f"{x * 1e6:.0f}")  #: Formatter for micrometer axes
 
 
 def fig_to_png(fig: Figure) -> bytes:
@@ -250,7 +250,7 @@ def plot_setup(  # noqa: C901
             line = ax.plot(zs, r0 + ci, ls="--", color=ci_color, alpha=beam_kwargs.get("alpha"), zorder=105)[0]
             beam_deviation.append(line)
         r_max = np.max(rs + rs_ci)
-        handles.append((beam_deviation[0], f"{round(confidence_interval*100)}% CI ({beam_label})"))
+        handles.append((beam_deviation[0], f"{round(confidence_interval * 100)}% CI ({beam_label})"))
     # TODO make beam plot function?
 
     # TODO factor out into plot lens function?
@@ -267,9 +267,9 @@ def plot_setup(  # noqa: C901
             zorder=zorder,
         )
 
-        label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length*1e3)}mm"
+        label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length * 1e3)}mm"
         if i in free_lenses:
-            label_text = f"$L_{i}$: {label_text} @{round(pos*1e3)}mm"
+            label_text = f"$L_{i}$: {label_text} @{round(pos * 1e3)}mm"
         label = ax.text(
             pos,
             -r_max * (1 + RELATIVE_MARGIN),
@@ -439,7 +439,7 @@ def plot_mode_match_solution_setup(  # noqa: C901
     if show_legend:
         ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
 
-    ax.set_title(f"Optical Setup ({self.overlap*100:.2f}% mode overlap)")
+    ax.set_title(f"Optical Setup ({self.overlap * 100:.2f}% mode overlap)")
 
     return ModeMatchingPlot(
         ax=ax,
@@ -543,7 +543,10 @@ def plot_reachability(
     linspaces = [
         np.linspace(-d, d, num=n) + offset
         for d, n, offset in zip(
-            displacement, num_samples, self.positions[dimensions], strict=True  # pyright: ignore[reportArgumentType]
+            displacement,
+            num_samples,
+            self.positions[dimensions],
+            strict=True,  # pyright: ignore[reportArgumentType]
         )
     ]
 
@@ -583,7 +586,7 @@ def plot_reachability(
         waists_flat = select_lines(waists, i, line_step)  # pyright: ignore[reportArgumentType]
         lines.append([])
         for focus, waist in zip(focuses_flat, waists_flat, strict=True):
-            line = ax.plot(focus, waist, color=f"C{i}", label=rf"$\Delta x_{dim}$ ($\pm{disp*1e3:.1f}$ mm)")[0]
+            line = ax.plot(focus, waist, color=f"C{i}", label=rf"$\Delta x_{dim}$ ($\pm{disp * 1e3:.1f}$ mm)")[0]
             lines[-1].append(line)
         ax.annotate(
             "",
@@ -614,7 +617,7 @@ def plot_reachability(
     ax.set_xlabel(rf"$\Delta z_0$ in mm ($\nabla z_0$=[{' '.join(f'{x:.3f}' for x in jacobian[0])}])")
     ax.xaxis.set_major_formatter(milli_formatter)
 
-    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jacobian[1]*1e3)}]e-3)")
+    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jacobian[1] * 1e3)}]e-3)")
     ax.yaxis.set_major_formatter(micro_formatter)
 
     ax.set_title("Reachability Analysis")
@@ -682,7 +685,9 @@ def plot_sensitivity(
 
     mode_overlap = np.vectorize(
         vector_partial(
-            self.candidate.parametrized_overlap, self.positions, dimensions  # pyright: ignore[reportArgumentType]
+            self.candidate.parametrized_overlap,  # pyright: ignore[reportArgumentType]
+            self.positions,
+            dimensions,
         ),
         signature="(n)->()",
     )
@@ -735,7 +740,7 @@ def plot_sensitivity(
             if i == num_samples_z // 2:
                 ax.clabel(cont, fmt="%1.1f%%", colors=[color])
         handles = [
-            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value*1e3:.1f}$ mm")
+            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value * 1e3:.1f}$ mm")
             for color, value in zip(z_colors, zs, strict=True)
         ]
         ax.legend(handles=handles, loc="lower left").set_zorder(1000)
@@ -750,12 +755,12 @@ def plot_sensitivity(
     dims = dimensions
     sens_x = self.analysis.sensitivities[dims[0], dims[0]] * unit.value.factor
     sens_y = self.analysis.sensitivities[dims[1], dims[1]] * unit.value.factor
-    ax.set_xlabel(rf"$\Delta x_{{{dims[0]}}}$ in mm ($s_{{{str(dims[0])*2}}}={sens_x:.2f}{unit.value.tex}$)")
-    ax.set_ylabel(rf"$\Delta x_{{{dims[1]}}}$ in mm ($s_{{{str(dims[1])*2}}}={sens_y:.2f}{unit.value.tex}$)")
+    ax.set_xlabel(rf"$\Delta x_{{{dims[0]}}}$ in mm ($s_{{{str(dims[0]) * 2}}}={sens_x:.2f}{unit.value.tex}$)")
+    ax.set_ylabel(rf"$\Delta x_{{{dims[1]}}}$ in mm ($s_{{{str(dims[1]) * 2}}}={sens_y:.2f}{unit.value.tex}$)")
     ax.xaxis.set_major_formatter(milli_formatter)
     ax.yaxis.set_major_formatter(milli_formatter)
 
-    ax.set_title(rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}={self.analysis.min_coupling*100:.2f}\%$)")
+    ax.set_title(rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}={self.analysis.min_coupling * 100:.2f}\%$)")
 
     return SensitivityPlot(
         ax=ax, displacements_ci=displacements_ci, contours=contours, colorbar=colorbar, handles=handles

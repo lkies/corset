@@ -353,7 +353,9 @@ class ModeMatchingCandidate(YamlSerializableMixin):
     populations: list[tuple[Lens, ...]]  #: Lens populations for each range
 
     def generate_initial_positions(
-        self, randomize: bool, rng: np.random.Generator = np.random.default_rng()  # noqa: B008
+        self,
+        randomize: bool,
+        rng: np.random.Generator = np.random.default_rng(),  # noqa: B008
     ) -> np.ndarray:
         """Generate a set of initial positions for free lenses of the candidate.
 
@@ -431,9 +433,7 @@ class ModeMatchingCandidate(YamlSerializableMixin):
                     )
                 )
         cols, lb, ub = zip(*constraints, strict=True)
-        return optimize.LinearConstraint(
-            np.vstack(cols), np.array(lb), np.array(ub)  # pyright: ignore[reportArgumentType]
-        )
+        return optimize.LinearConstraint(np.vstack(cols), np.array(lb), np.array(ub))  # pyright: ignore[reportArgumentType]
 
     @cached_property
     def radius_constraint(self) -> optimize.NonlinearConstraint:
@@ -498,7 +498,7 @@ class ModeMatchingCandidate(YamlSerializableMixin):
         final_beam = setup.beams_fast[-1]
         return np.array([final_beam.focus, final_beam.waist])
 
-    def optimize(
+    def optimize(  # noqa: C901
         self,
         filter_pred: Callable[["ModeMatchingSolution"], bool],
         random_initial_positions: int,
@@ -839,7 +839,7 @@ def mode_match(
         args = locals().copy()
         args.pop("cache_dir")
         args.pop("tqdm_args")
-        args_hash = hashlib.md5(repr(sorted(args.items())).encode()).hexdigest()  # noqa: S324
+        args_hash = hashlib.md5(repr(sorted(args.items())).encode(), usedforsecurity=False).hexdigest()
         cache_file = cache_dir / f"{args_hash}.yaml"
         if cache_file.exists():
             return SolutionList.load_yaml(cache_file)
