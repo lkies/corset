@@ -564,7 +564,14 @@ class ModeMatchingCandidate(YamlSerializableMixin):
             if not res.success:
                 continue
 
-            sol = ModeMatchingSolution(candidate=self, positions=res.x)
+            # force positions to be ascending for well defined setup
+            # in theory the constraints should already make sure of this but precision
+            # limitations may cause them to be out of order anyway
+            positions = res.x.copy()
+            for i, (prev, pos) in enumerate(pairwise(positions), start=1):
+                positions[i] = max(pos, np.nextafter(prev, np.inf))
+
+            sol = ModeMatchingSolution(candidate=self, positions=positions)
             if any(np.allclose(sol.positions, pos, atol=equal_setup_tol, rtol=0) for pos in solution_positions):
                 continue
             if filter_pred(sol):  # pyright: ignore[reportCallIssue]
