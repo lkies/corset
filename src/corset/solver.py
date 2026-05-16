@@ -23,6 +23,12 @@ from typing import Any, cast, overload
 import numpy as np
 import pandas as pd
 from scipy import optimize
+from tqdm import TqdmExperimentalWarning
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
+    from tqdm.autonotebook import tqdm
+
 
 from .analysis import ModeMatchingAnalysis
 from .core import Beam, Lens, OpticalSetup
@@ -808,7 +814,7 @@ def mode_match(
         random_seed: Random seed for reproducibility.
         cache_dir: If this is not ``None`` cached solutions and look for cached solutions in the
             provide directory. The cached is unbounded.
-        tqdm_args: Arguments for the tqdm progress bar.
+        tqdm_kwargs: Arguments for the tqdm progress bar.
 
     Returns:
         A :class:`SolutionList` containing the optimized mode matching solutions.
@@ -827,19 +833,18 @@ def mode_match(
         The number of initial guesses required to have a reasonable chance of finding an optimum (should
         it exists) increases with the constraint and setup complexity.
     """
-    from tqdm import TqdmExperimentalWarning
+    cache_args = locals().copy()  # save args before anything else enters the namespace
 
-    warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
-    from tqdm.autonotebook import tqdm
+    from . import __version__
 
     if cache_dir:
         if not isinstance(filter_pred, float):
             raise ValueError("Caching is not supported when `filter_pred` is not a float.")
         cache_dir = Path(cache_dir)
-        args = locals().copy()
-        args.pop("cache_dir")
-        args.pop("tqdm_args")
-        args_hash = hashlib.md5(repr(sorted(args.items())).encode(), usedforsecurity=False).hexdigest()
+        cache_args.pop("cache_dir")
+        cache_args.pop("tqdm_kwargs")
+        cache_args["corset_version"] = __version__
+        args_hash = hashlib.md5(repr(sorted(cache_args.items())).encode(), usedforsecurity=False).hexdigest()
         cache_file = cache_dir / f"{args_hash}.yaml"
         if cache_file.exists():
             return SolutionList.load_yaml(cache_file)
@@ -895,7 +900,3 @@ def mode_match(
         res.save_yaml(cache_file)
 
     return res
-
-    # TODO some sanity checks to ensure the desired beam is after the last setup part
-    # TODO other checks like non overlapping regions
-    # TODO return special solution list type that allows sorting and filtering and other convenient stuff
