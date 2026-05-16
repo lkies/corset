@@ -134,7 +134,7 @@ class LensList(YamlSerializableMixin):
                 for lens in self.lenses
             ]
         )
-        if all(df["type"] == "thin"):
+        if self.lenses and all(df["type"] == "thin"):
             df = df.drop(columns=["in_roc", "out_roc", "thickness", "refractive_index"])
         return df
 
@@ -151,11 +151,11 @@ class LensList(YamlSerializableMixin):
         self.df.drop(columns=["lens"]).to_csv(path, index=False)
 
     @classmethod
-    def load_csv(cls, path: str | Path) -> "LensList":
-        """Load a lens list from a CSV file.
+    def load_csv(cls, *paths: str | Path) -> "LensList":
+        """Load a lens list by combining data from one or more CSV files.
 
         Args:
-            path: Path to the CSV file. This is passed directly to :func:`pandas.read_csv` so it also
+            paths: Paths to the CSV files. They are passed directly to :func:`pandas.read_csv` so it also
                 accepts other types supported by that function like URL strings or file-like objects.
 
         Returns:
@@ -165,24 +165,30 @@ class LensList(YamlSerializableMixin):
             ValueError: If the CSV file contains invalid data.
             KeyError: If required fields are missing in the CSV file.
         """
-        df = pd.read_csv(path)
+        if len(paths) == 0:
+            raise ValueError("At least one file must be provided.")
+
         lenses: list[Lens] = []
-        for i, row in df.iterrows():
-            line = cast(int, i) + 2
-            lens_cls = {"thin": ThinLens, "thick": ThickLens}.get(row["type"])
-            if lens_cls is None:
-                raise ValueError(f"Unknown lens type: {row['type']}")
-            try:
-                kwargs = {f.name: row[f.name] for f in fields(lens_cls)}
-                kwargs["name"] = kwargs["name"] if pd.notna(kwargs["name"]) else None
-                lens: Lens = lens_cls(**kwargs)  # type: ignore[arg-type]
-                lenses.append(lens)
-            except ValueError as e:
-                raise ValueError(f"Error creating lens from line {line}: {e}") from e
-            except KeyError as e:
-                raise ValueError(f"Missing required field '{e.args[0]}' for lens from line {line}") from e
-            if lens_cls is ThickLens and not np.isclose(lens.focal_length, row.get("focal_length", lens.focal_length)):
-                raise ValueError(f"If specified, thick lens focal length must match computed value (line {line})")
+        for path in paths:
+            df = pd.read_csv(path)
+            for i, row in df.iterrows():
+                line = cast(int, i) + 2
+                lens_cls = {"thin": ThinLens, "thick": ThickLens}.get(row["type"])
+                if lens_cls is None:
+                    raise ValueError(f"Unknown lens type: {row['type']}")
+                try:
+                    kwargs = {f.name: row[f.name] for f in fields(lens_cls)}
+                    kwargs["name"] = kwargs["name"] if pd.notna(kwargs["name"]) else None
+                    lens: Lens = lens_cls(**kwargs)  # type: ignore[arg-type]
+                    lenses.append(lens)
+                except ValueError as e:
+                    raise ValueError(f"Error creating lens from line {line}: {e}") from e
+                except KeyError as e:
+                    raise ValueError(f"Missing required field '{e.args[0]}' for lens from line {line}") from e
+                if lens_cls is ThickLens and not np.isclose(
+                    lens.focal_length, row.get("focal_length", lens.focal_length)
+                ):
+                    raise ValueError(f"If specified, thick lens focal length must match computed value (line {line})")
         return cls(lenses=lenses)
 
     @classmethod
@@ -198,16 +204,15 @@ class LensList(YamlSerializableMixin):
         ]
 
     @classmethod
-    def load(cls, name: str) -> "LensList":
+    def load(cls, *names: str) -> "LensList":
         """Load a lens database from the built-in library.
 
         Args:
-            name: Name of the lens database to load.
-
+            names: Names of the lens databases to load.
         Returns:
             LensList: The loaded lens database.
 
         Raises:
             FileNotFoundError: If the lens database name is not found in the library.
         """
-        return cls.load_csv(cls._database_dir / f"{name}.csv")
+        return cls.load_csv(*(cls._database_dir / f"{name}.csv" for name in names))
