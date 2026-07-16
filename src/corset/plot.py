@@ -749,7 +749,9 @@ def plot_sensitivity(
     if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
         jac_inv = np.linalg.inv(self.analysis.focus_and_waist_jacobian[:, dimensions[:2]])
         cov_xy = jac_inv @ self.setup.beams[-1].gauss_cov @ jac_inv.T
+        limits = ax.axis()
         displacements_ci = plot_ellipse(ax, (0, 0), cov_xy, confidence_interval)
+        ax.axis(limits)
 
     unit = Config.sensitivity_unit
     dims = dimensions
