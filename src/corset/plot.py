@@ -20,10 +20,10 @@ from matplotlib.legend_handler import HandlerPatch
 from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.text import Annotation
-from matplotlib.ticker import FuncFormatter
 from scipy import stats
 
 from .config import Config
+from .display import FractionUnit, LengthUnit, SensitivityUnit
 
 # prevent circular import for type annotation in function signature
 if TYPE_CHECKING:
@@ -31,9 +31,6 @@ if TYPE_CHECKING:
     from .solver import ModeMatchingSolution
 
 RELATIVE_MARGIN = 0.1  #: Relative margin size for plotting optical setups
-
-milli_formatter = FuncFormatter(lambda x, _: f"{x * 1e3:.0f}")  #: Formatter for millimeter axes
-micro_formatter = FuncFormatter(lambda x, _: f"{x * 1e6:.0f}")  #: Formatter for micrometer axes
 
 
 def fig_to_png(fig: Figure) -> bytes:
@@ -128,21 +125,24 @@ def get_handles(ax: Axes) -> list[tuple[Any, str]]:
 def plot_setup(  # noqa: C901
     self: "OpticalSetup",
     *,
+    ax: Axes | None = None,
     points: int | np.ndarray | None = None,
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict | None = None,
     confidence_interval: float | bool | None = None,
     rayleigh_range_cap: float | None = None,
     free_lenses: list[int] = [],  # noqa: B006
-    ax: Axes | None = None,
     show_legend: bool | None = None,
     legend_loc: str | None = None,
+    axial_unit: LengthUnit | None = None,
+    radial_unit: LengthUnit | None = None,
     # TODO add back other configuration options?
 ) -> OpticalSetupPlot:
     """Plot the the beam profile and optical elements of the setup.
 
     Args:
         self: The optical setup instance.
+        ax: The axes to plot on. If ``None``, the current axes are used.
         points: Number of points or specific z-coordinates to evaluate the beam profile.
             If ``None``, this defaults to :attr:`Config.PlotSetup.beam_points <corset.config.Config.PlotSetup.beam_points>`.
         limits: Z-coordinate limits for the plot.
@@ -155,11 +155,14 @@ def plot_setup(  # noqa: C901
         rayleigh_range_cap: Maximum Rayleigh range to consider when determining plot limits.
             If ``None`` this defaults to :attr:`Config.PlotSetup.rayleigh_range_cap <corset.config.Config.PlotSetup.rayleigh_range_cap>`.
         free_lenses: Indices of lenses to treat as free elements in the plot.
-        ax: The axes to plot on. If ``None``, the current axes are used.
         show_legend: Whether to show a legend for the plot.
             If ``None``, this defaults to :attr:`Config.PlotSetup.show_legend <corset.config.Config.PlotSetup.show_legend>`.
         legend_loc: Location of the legend in the plot.
             If ``None``, this defaults to :attr:`Config.PlotSetup.legend_loc <corset.config.Config.PlotSetup.legend_loc>`.
+        axial_unit: Unit to use for the axial quantities along the beam, i.e., the coordinate along the beam.
+            If ``None``, this defaults to :attr:`Config.Units.axial <corset.config.Config.Units.axial>`.
+        radial_unit: Unit to use for the radial across the beam, i.e., the beam radius.
+            If ``None``, this defaults to :attr:`Config.Units.radial <corset.config.Config.Units.radial>`.
 
     Returns:
         An :class:`OpticalSetupPlot` containing references to the plot elements.
@@ -173,6 +176,8 @@ def plot_setup(  # noqa: C901
         raise ValueError("confidence_interval cannot be True, must be a float between 0 and 1 or False")
     confidence_interval = Config.get(confidence_interval, Config.PlotSetup.confidence_interval)
     rayleigh_range_cap = Config.get(rayleigh_range_cap, Config.PlotSetup.rayleigh_range_cap)
+    axial_unit = Config.get(axial_unit, Config.Units.axial)
+    radial_unit = Config.get(radial_unit, Config.Units.radial)
 
     # plot the beam as a corset it it is called "Corset", there are no lenses,
     # the limits are automatically determined and there is no beam covariance
@@ -267,9 +272,9 @@ def plot_setup(  # noqa: C901
             zorder=zorder,
         )
 
-        label_text = lens.name if lens.name is not None else f"f={round(lens.focal_length * 1e3)}mm"
+        label_text = str(lens)
         if i in free_lenses:
-            label_text = f"$L_{i}$: {label_text} @{round(pos * 1e3)}mm"
+            label_text = f"$L_{i}$: {label_text} @ {axial_unit.format(pos, tex=True)}"
         label = ax.text(
             pos,
             -r_max * (1 + RELATIVE_MARGIN),
@@ -309,11 +314,11 @@ def plot_setup(  # noqa: C901
         max(r_max * (1 + 3 * RELATIVE_MARGIN), ax.get_ylim()[1]),
     )
 
-    ax.set_xlabel("z in mm")
-    ax.xaxis.set_major_formatter(milli_formatter)
+    ax.set_xlabel(f"z in {axial_unit.dollar_tex}")
+    ax.xaxis.set_major_formatter(axial_unit.axis_formatter())
 
-    ax.set_ylabel(r"w(z) in $\mathrm{\mu m}$")
-    ax.yaxis.set_major_formatter(micro_formatter)
+    ax.set_ylabel(f"w(z) in {radial_unit.dollar_tex}")
+    ax.yaxis.set_major_formatter(radial_unit.axis_formatter())
 
     if show_legend:
         ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
@@ -333,25 +338,29 @@ def plot_setup(  # noqa: C901
 def plot_mode_match_solution_setup(  # noqa: C901
     self: "ModeMatchingSolution",
     *,
+    ax: Axes | None = None,
     setup_kwargs: dict | None = None,
     desired_kwargs: dict | None = None,
-    ax: Axes | None = None,
     show_legend: bool | None = None,
     legend_loc: str | None = None,
+    fraction_unit: FractionUnit | None = None,
 ) -> ModeMatchingPlot:
     """Plot the mode matching solution setup including the desired beam and constraints.
 
     Args:
         self: The mode matching solution instance.
+        ax: The axes to plot on. If ``None``, the current axes are used.
         setup_kwargs: Additional keyword arguments passed to the setup plot function.
             If ``None``, this defaults to :attr:`Config.PlotSolution.setup_kwargs <corset.config.Config.PlotSolution.setup_kwargs>`.
         desired_kwargs: Additional keyword arguments passed to the desired beam plot function.
-            If ``None``, this defaults to :attr:`Config.PlotSolution.desired_kwargs <corset.config.Config.PlotSolution.desired_kwargs>`.
-        ax: The axes to plot on. If ``None``, the current axes are used.
+            If ``None``, this defaults to :attr:`Config.PlotSolution.desired_kwargs <corset.config.Config.PlotSolution.desired_kwargs>`.7
         show_legend: Whether to show a legend for the plot.
             If ``None``, this defaults to :attr:`Config.PlotSolution.show_legend <corset.config.Config.PlotSolution.show_legend>`.
         legend_loc: Location of the legend in the plot.
             If ``None``, this defaults to :attr:`Config.PlotSolution.legend_loc <corset.config.Config.PlotSolution.legend_loc>`.
+        fraction_unit: Unit for fractional quantities, i.e., the mode overlap and coupling coefficients.
+            If ``None``, this defaults to :attr:`Config.Units.fraction <corset.config.Config.Units.fraction>`.
+
     Returns:
         An :class:`ModeMatchingPlot` containing references to the plot elements.
     """
@@ -363,6 +372,7 @@ def plot_mode_match_solution_setup(  # noqa: C901
     desired_kwargs = Config.get(desired_kwargs, Config.PlotSolution.desired_kwargs)
     show_legend = Config.get(show_legend, Config.PlotSolution.show_legend)
     legend_loc = Config.get(legend_loc, Config.PlotSolution.legend_loc)
+    fraction_unit = Config.get(fraction_unit, Config.Units.fraction)
 
     problem = self.candidate.problem
 
@@ -439,7 +449,7 @@ def plot_mode_match_solution_setup(  # noqa: C901
     if show_legend:
         ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
 
-    ax.set_title(f"Optical Setup ({self.overlap * 100:.2f}% mode overlap)")
+    ax.set_title(f"Optical Setup ({fraction_unit.format(self.overlap, tex=True)} mode overlap)")
 
     return ModeMatchingPlot(
         ax=ax,
@@ -491,6 +501,7 @@ def plot_ellipse(
 def plot_reachability(
     self: "ModeMatchingSolution",
     *,
+    ax: Axes | None = None,
     displacement: float | list[float] | None = None,
     num_samples: int | list[int] | None = None,
     line_step: int | list[int] | None = None,
@@ -499,12 +510,15 @@ def plot_reachability(
     waist_range: tuple[float, float] | None = None,
     confidence_interval: float | None = None,
     grid_resolution: int | None = None,
-    ax: Axes | None = None,
+    axial_unit: LengthUnit | None = None,
+    radial_unit: LengthUnit | None = None,
+    fraction_unit: FractionUnit | None = None,
 ) -> ReachabilityPlot:
     """Plot a reachability analysis of the mode matching solution.
 
     Args:
         self: The mode matching solution instance.
+        ax: The axes to plot on. If ``None``, the current axes are used.
         displacement: Maximum displacement from the optimal position(s) in meters.
             If ``None``, this defaults to :attr:`Config.PlotReachability.displacement <corset.config.Config.PlotReachability.displacement>`.
         num_samples: Number of samples to take along each dimension.
@@ -518,7 +532,12 @@ def plot_reachability(
             If ``None``, this defaults to :attr:`Config.PlotReachability.confidence_interval <corset.config.Config.PlotReachability.confidence_interval>`.
         grid_resolution: Resolution of the grid for the background mode overlap contour plot.
             If ``None``, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
-        ax: The axes to plot on. If ``None``, the current axes are used.
+        axial_unit: Unit to use for the axial quantities along the beam, i.e., the coordinate along the beam.
+            If ``None``, this defaults to :attr:`Config.Units.axial <corset.config.Config.Units.axial>`.
+        radial_unit: Unit to use for the radial across the beam, i.e., the beam radius.
+            If ``None``, this defaults to :attr:`Config.Units.radial <corset.config.Config.Units.radial>`.
+        fraction_unit: Unit for fractional quantities, i.e., the mode overlap and coupling coefficients.
+            If ``None``, this defaults to :attr:`Config.Units.fraction <corset.config.Config.Units.fraction>`.
 
     Returns:
         A :class:`ReachabilityPlot` containing references to the plot elements.
@@ -534,6 +553,11 @@ def plot_reachability(
     confidence_interval = Config.get(confidence_interval, Config.PlotReachability.confidence_interval)
     grid_resolution = Config.get(grid_resolution, Config.Overlap.grid_resolution)
     dimensions = list(Config.get(dimensions, range(len(self.positions))))
+    axial_unit = Config.get(axial_unit, Config.Units.axial)
+    radial_unit = Config.get(radial_unit, Config.Units.radial)
+    fraction_unit = Config.get(fraction_unit, Config.Units.fraction)
+    axial_per_axial_unit = axial_unit / axial_unit
+    radial_per_axial_unit = radial_unit / axial_unit
 
     num_dof = len(dimensions)
     displacement = cast(list, [displacement] * num_dof if np.isscalar(displacement) else displacement)
@@ -609,16 +633,21 @@ def plot_reachability(
 
     levels = Config.Overlap.levels
     colors = Config.Overlap.colors()
-    res = ax.contourf(focuses_grid, waists_grid, overlap * 100, levels=levels, colors=colors, alpha=0.5)
-    cb = ax.figure.colorbar(res, label="Mode overlap (%)")
+    res = ax.contourf(focuses_grid, waists_grid, overlap, levels=levels, colors=colors, alpha=0.5)
+    cb = ax.figure.colorbar(
+        res, label=f"Mode overlap ({fraction_unit.dollar_tex})", format=fraction_unit.axis_formatter()
+    )
 
     jacobian = self.analysis.focus_and_waist_jacobian
 
-    ax.set_xlabel(rf"$\Delta z_0$ in mm ($\nabla z_0$=[{' '.join(f'{x:.3f}' for x in jacobian[0])}])")
-    ax.xaxis.set_major_formatter(milli_formatter)
+    #
+    ax.set_xlabel(
+        rf"$\Delta z_0$ in {axial_unit.dollar_tex} ($\nabla z_0$ = {axial_per_axial_unit.format(jacobian[0])})"
+    )
+    ax.xaxis.set_major_formatter(axial_unit.axis_formatter())
 
-    ax.set_ylabel(rf"$w_0$ in $\mathrm{{\mu m}}$ ($\nabla w_0$=[{' '.join(f'{x:.3f}' for x in jacobian[1] * 1e3)}]e-3)")
-    ax.yaxis.set_major_formatter(micro_formatter)
+    ax.set_ylabel(rf"$w_0$ in {radial_unit.dollar_tex} ($\nabla w_0$ = {radial_per_axial_unit.format(jacobian[1])})")
+    ax.yaxis.set_major_formatter(radial_unit.axis_formatter())
 
     ax.set_title("Reachability Analysis")
 
@@ -628,6 +657,7 @@ def plot_reachability(
 def plot_sensitivity(
     self: "ModeMatchingSolution",
     *,
+    ax: Axes | None = None,
     dimensions: tuple[int, int] | tuple[int, int, int] | None = None,
     worst_overlap: float | None = None,
     x_displacement: float | None = None,
@@ -637,12 +667,15 @@ def plot_sensitivity(
     confidence_interval: float | None = None,
     force_contour_lines: bool | None = None,
     grid_resolution: int | None = None,
-    ax: Axes | None = None,
+    axial_unit: LengthUnit | None = None,
+    fraction_unit: FractionUnit | None = None,
+    sensitivity_unit: SensitivityUnit | None = None,
 ) -> SensitivityPlot:
     """Plot a sensitivity analysis of the mode matching solution.
 
     Args:
         self: The mode matching solution instance.
+        ax: The axes to plot on. If ``None``, the current axes are used.
         dimensions: Indices of the dimensions to analyze. If ``None``, the two least
             coupled dimensions are used as the x and y dimensions, and the remaining most sensitive
             dimension is used as the auxiliary z dimension if applicable.
@@ -660,7 +693,12 @@ def plot_sensitivity(
             degrees of freedom. If ``None``, this defaults to :attr:`Config.PlotSensitivity.force_contour_lines <corset.config.Config.PlotSensitivity.force_contour_lines>`.
         grid_resolution: Resolution of the grid for the contour plots.
             If ``None``, this defaults to :attr:`Config.Overlap.grid_resolution <corset.config.Config.Overlap.grid_resolution>`.
-        ax: The axes to plot on. If ``None``, the current axes are used.
+        axial_unit: Unit to use for the axial quantities along the beam, i.e., the coordinate along the beam.
+            If ``None``, this defaults to :attr:`Config.Units.axial <corset.config.Config.Units.axial>`.
+        fraction_unit: Unit for fractional quantities, i.e., the mode overlap and coupling coefficients.
+            If ``None``, this defaults to :attr:`Config.Units.fraction <corset.config.Config.Units.fraction>`.
+        sensitivity_unit: Unit for sensitivity quantities, i.e., the overlap lost for a certain squared displacement.
+            If ``None``, this defaults to :attr:`Config.Units.sensitivity <corset.config.Config.Units.sensitivity>`.
 
     Returns:
         A :class:`SensitivityPlot` containing references to the plot elements.
@@ -668,12 +706,15 @@ def plot_sensitivity(
 
     from .analysis import vector_partial
 
+    ax = ax or plt.gca()
     worst_overlap = Config.get(worst_overlap, Config.PlotSensitivity.worst_overlap)
     num_samples_z = Config.get(num_samples_z, Config.PlotSensitivity.num_samples_z)
     confidence_interval = Config.get(confidence_interval, Config.PlotSensitivity.confidence_interval)
     force_contour_lines = Config.get(force_contour_lines, Config.PlotSensitivity.force_contour_lines)
     grid_resolution = Config.get(grid_resolution, Config.Overlap.grid_resolution)
-    ax = ax or plt.gca()
+    axial_unit = Config.get(axial_unit, Config.Units.axial)
+    fraction_unit = Config.get(fraction_unit, Config.Units.fraction)
+    sensitivity_unit = Config.get(sensitivity_unit, Config.Units.sensitivity)
 
     if dimensions is None:
         dimensions = self.analysis.min_coupling_pair
@@ -718,12 +759,14 @@ def plot_sensitivity(
     if len(dimensions) == 2:
         overlaps = mode_overlap(np.stack([xsg, ysg], axis=-1) + base)
         if force_contour_lines:
-            cont = ax.contour(xsg, ysg, overlaps * 100, levels=Config.Overlap.levels, colors=cmap(0.5))
-            ax.clabel(cont, fmt="%1.1f%%")
+            cont = ax.contour(xsg, ysg, overlaps, levels=Config.Overlap.levels, colors=cmap(0.5))
+            ax.clabel(cont, fmt=fraction_unit.axis_formatter(include_unit=True))
             contours.append(cont)
         else:
-            cont = ax.contourf(xsg, ysg, overlaps * 100, levels=Config.Overlap.levels, colors=Config.Overlap.colors())
-            colorbar = ax.figure.colorbar(cont, label="Mode overlap (%)")
+            cont = ax.contourf(xsg, ysg, overlaps, levels=Config.Overlap.levels, colors=Config.Overlap.colors())
+            colorbar = ax.figure.colorbar(
+                cont, label=f"Mode overlap ({fraction_unit.dollar_tex})", format=fraction_unit.axis_formatter()
+            )
             contours.append(cont)
     else:
         z_displacement = cast(float, z_displacement)  # make type checker happy
@@ -734,13 +777,17 @@ def plot_sensitivity(
             overlaps = mode_overlap(positions)
             zorder = 100 if i == num_samples_z // 2 else 10
             cont = ax.contour(
-                xsg, ysg, overlaps * 100, levels=Config.Overlap.levels, colors=[color], alpha=0.7, zorder=zorder
+                xsg, ysg, overlaps, levels=Config.Overlap.levels, colors=[color], alpha=0.7, zorder=zorder
             )
             contours.append(cont)
             if i == num_samples_z // 2:
-                ax.clabel(cont, fmt="%1.1f%%", colors=[color])
+                ax.clabel(
+                    cont,
+                    fmt=fraction_unit.axis_formatter(include_unit=True),
+                    colors=[color],
+                )
         handles = [
-            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {value * 1e3:.1f}$ mm")
+            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}}$ = {axial_unit.format(value, tex=True)}")
             for color, value in zip(z_colors, zs, strict=True)
         ]
         ax.legend(handles=handles, loc="lower left").set_zorder(1000)
@@ -753,16 +800,22 @@ def plot_sensitivity(
         displacements_ci = plot_ellipse(ax, (0, 0), cov_xy, confidence_interval)
         ax.axis(limits)
 
-    unit = Config.sensitivity_unit
     dims = dimensions
-    sens_x = self.analysis.sensitivities[dims[0], dims[0]] * unit.value.factor
-    sens_y = self.analysis.sensitivities[dims[1], dims[1]] * unit.value.factor
-    ax.set_xlabel(rf"$\Delta x_{{{dims[0]}}}$ in mm ($s_{{{str(dims[0]) * 2}}}={sens_x:.2f}{unit.value.tex}$)")
-    ax.set_ylabel(rf"$\Delta x_{{{dims[1]}}}$ in mm ($s_{{{str(dims[1]) * 2}}}={sens_y:.2f}{unit.value.tex}$)")
-    ax.xaxis.set_major_formatter(milli_formatter)
-    ax.yaxis.set_major_formatter(milli_formatter)
+    sens_x = self.analysis.sensitivities[dims[0], dims[0]]
+    sens_y = self.analysis.sensitivities[dims[1], dims[1]]
+    su = sensitivity_unit
+    ax.set_xlabel(
+        rf"$\Delta x_{{{dims[0]}}}$ in {axial_unit.dollar_tex} ($s_{{{str(dims[0]) * 2}}}$ = {su.format(sens_x, tex=True)})"
+    )
+    ax.set_ylabel(
+        rf"$\Delta x_{{{dims[1]}}}$ in {axial_unit.dollar_tex} ($s_{{{str(dims[1]) * 2}}}$ = {su.format(sens_y, tex=True)})"
+    )
+    ax.xaxis.set_major_formatter(axial_unit.axis_formatter())
+    ax.yaxis.set_major_formatter(axial_unit.axis_formatter())
 
-    ax.set_title(rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}={self.analysis.min_coupling * 100:.2f}\%$)")
+    ax.set_title(
+        rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}$ = {fraction_unit.format(self.analysis.min_coupling, tex=True)})"
+    )
 
     return SensitivityPlot(
         ax=ax, displacements_ci=displacements_ci, contours=contours, colorbar=colorbar, handles=handles

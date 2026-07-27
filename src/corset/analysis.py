@@ -4,15 +4,17 @@ import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property, wraps
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 import pandas as pd
 
 from .config import Config
+from .core import Lens
+from .display import FormattedDataFrame, FractionUnit, LengthUnit, SensitivityUnit, Units
 
 if TYPE_CHECKING:
-    from .solver import ModeMatchingSolution
+    from .solver import ModeMatchingSolution, ShiftingRange
 
 
 def wrap_for_differentiate(
@@ -260,42 +262,34 @@ class ModeMatchingAnalysis:
         equal to the second row of the Jacobian."""
         return self.focus_and_waist_jacobian[1]
 
-    def summary(self, sensitivity_unit: Config.SensitivityUnit | bool | None = None) -> dict:
-        """Create a summary dictionary of the analysis results
+    class SolutionSummary(TypedDict):
+        """Summary dictionary for mode matching analysis."""
 
-        Args:
-            sensitivity_unit: The unit to use for sensitivities in the summary.
-                If ``False``, the raw sensitivities without unit conversion are used.
-                If ``None`` this defaults to :attr:`Config.sensitivity_unit <corset.config.Config.sensitivity_unit>`.
+        overlap: float  #: The mode overlap of the solution.
+        num_elements: int  #: The number of free elements (i.e. elements used for mode matching) in the setup.
+        elements: list[Lens]  #: A list of the free elements (i.e. elements used for mode matching) in the setup.
+        positions: np.ndarray  #: The positions of the free elements in the setup.
+        min_sensitivity_axis: int  #: The index of the degree of freedom with minimal sensitivity.
+        min_sensitivity: float  #: The minimal sensitivity.
+        max_sensitivity_axis: int  #: The index of the degree of freedom with maximal sensitivity.
+        max_sensitivity: float  #: The maximal sensitivity.
+        min_cross_sens_pair: tuple[int, int]
+        """The indices of the pair of degrees of freedom with minimal cross-sensitivity."""
+        min_cross_sens: float  #: The minimal cross-sensitivity.
+        min_cross_sens_direction: np.ndarray  #: The direction of the least cross-sensitive pair of degrees of freedom.
+        min_coupling_pair: tuple[int, int]  #: The indices of the pair of degrees of freedom with minimal coupling.
+        min_coupling: float  #: The minimal coupling.
+        sensitivities: np.ndarray  #: The sensitivity matrix.
+        couplings: np.ndarray  #: The coupling matrix.
+        const_space: list[np.ndarray]  #: The basis vectors spanning the constant overlap sub-space.
+        grad_focus: np.ndarray  #: The gradient of the final beam focus with respect to the element positions.
+        grad_waist: np.ndarray  #: The gradient of the final beam waist with respect to the element positions.
+        solution: "ModeMatchingSolution"  #: The analyzed mode matching solution.
 
-        Returns:
-            A dictionary containing the summary data. The keys are
+    @cached_property
+    def summary(self) -> SolutionSummary:
+        """Summary dictionary of the analysis results."""
 
-            - ``"overlap"``: The mode overlap of the solution.
-            - ``"num_elements"``: The number of free elements (i.e. elements used for mode matching) in the setup.
-            - ``"elements"``: A list of the free elements (i.e. elements used for mode matching) in the setup.
-            - ``"positions"``: The positions of the free elements in the setup.
-            - ``"min_sensitivity_axis"``: The index of the degree of freedom with minimal sensitivity.
-            - ``"min_sensitivity"``: The minimal sensitivity in the specified unit.
-            - ``"max_sensitivity_axis"``: The index of the degree of freedom with maximal sensitivity.
-            - ``"max_sensitivity"``: The maximal sensitivity in the specified unit.
-            - ``"min_cross_sens_pair"``: The indices of the pair of degrees of freedom with minimal cross-sensitivity.
-            - ``"min_cross_sens"``: The minimal cross-sensitivity in the specified unit.
-            - ``"min_cross_sens_direction"``: The direction of the least cross-sensitive pair of degrees of freedom.
-            - ``"min_coupling_pair"``: The indices of the pair of degrees of freedom with minimal coupling.
-            - ``"min_coupling"``: The minimal coupling.
-            - ``"sensitivities"``: The sensitivity matrix in the specified unit.
-            - ``"couplings"``: The coupling matrix.
-            - ``"const_space"``: The basis vectors spanning the constant overlap sub-space.
-            - ``"grad_focus"``: The gradient of the final beam focus with respect to the element positions.
-            - ``"grad_waist"``: The gradient of the final beam waist with respect to the element positions.
-            - ``"sensitivity_unit"``: The sensitivity unit used.
-            - ``"solution"``: The analyzed mode matching solution.
-
-        """
-
-        sensitivity_unit = cast(Config.SensitivityUnit, sensitivity_unit or Config.sensitivity_unit)
-        factor = sensitivity_unit.value.factor
         sol = self.solution
         return {
             "overlap": sol.overlap,
@@ -303,33 +297,183 @@ class ModeMatchingAnalysis:
             "elements": [sol.setup.elements[i][1] for i in sol.candidate.parametrized_setup.free_elements],
             "positions": sol.positions,
             "min_sensitivity_axis": self.min_sensitivity_axis,
-            "min_sensitivity": self.min_sensitivity * factor,
+            "min_sensitivity": self.min_sensitivity,
             "max_sensitivity_axis": self.max_sensitivity_axis,
-            "max_sensitivity": self.max_sensitivity * factor,
+            "max_sensitivity": self.max_sensitivity,
             "min_cross_sens_pair": self.min_cross_sens_pair,
-            "min_cross_sens": self.min_cross_sens * factor,
+            "min_cross_sens": self.min_cross_sens,
             "min_cross_sens_direction": self.min_cross_sens_direction,
             "min_coupling_pair": self.min_coupling_pair,
             "min_coupling": self.min_coupling,
-            "sensitivities": self.sensitivities * factor,
+            "sensitivities": self.sensitivities,
             "couplings": self.couplings,
             "const_space": self.const_space,
             "grad_focus": self.grad_focus,
             "grad_waist": self.grad_waist,
-            "sensitivity_unit": sensitivity_unit,
             "solution": sol,
         }
 
-    def summary_df(self, sensitivity_unit: Config.SensitivityUnit | None | bool = None) -> pd.DataFrame:
-        """Create a summary DataFrame of the analysis results
+    # for use in solver.SolutionList
+    @staticmethod
+    def _summary_formatters(
+        fraction_unit: FractionUnit | None = None,
+        sensitivity_unit: SensitivityUnit | None = None,
+        radial_unit: LengthUnit | None = None,
+        axial_unit: LengthUnit | None = None,
+    ):
+        from .solver import ModeMatchingSolution
 
-        Args:
-            sensitivity_unit: The unit to use for sensitivities in the summary. If ``None`` the default from :class:`Config` is used.
-                If ``False``, the raw sensitivities without unit conversion are used.
+        fraction_unit = Config.get(fraction_unit, Config.Units.fraction)
+        sensitivity_unit = Config.get(sensitivity_unit, Config.Units.sensitivity)
+        radial_unit = Config.get(radial_unit, Config.Units.radial)
+        axial_unit = Config.get(axial_unit, Config.Units.axial)
+
+        axial_per_axial_unit = axial_unit / axial_unit
+        radial_per_axial_unit = radial_unit / axial_unit
+        unitless = Units.Fraction.UNITY
+
+        return {
+            "overlap": fraction_unit.format,
+            "elements": lambda x: f"[{', '.join(str(e) for e in x)}]",  # pyright: ignore[reportGeneralTypeIssues]
+            "positions": axial_unit.format,
+            "min_sensitivity": sensitivity_unit.format,
+            "max_sensitivity": sensitivity_unit.format,
+            "min_cross_sens": sensitivity_unit.format,
+            "min_cross_sens_direction": unitless.format,
+            "min_coupling": fraction_unit.format,
+            "sensitivities": sensitivity_unit.format,
+            "couplings": fraction_unit.format,
+            "const_space": unitless.format,
+            "grad_focus": axial_per_axial_unit.format,
+            "grad_waist": radial_per_axial_unit.format,
+            "solution": lambda _: f"{ModeMatchingSolution.__name__}(...)",
+        }
+
+    class ElementInfo(TypedDict):
+        """Information about an element in a mode matching solution."""
+
+        element: Lens  #: The element object itself
+        shape: str  #: ASCII representation of the element shape
+        focal_length: float  #: Focal length of the element
+        position: float  #: Position of the element in the setup
+        clearance_left: float | None
+        """Clearance to the previous element or shifting range boundary if the element is a free element"""
+        clearance_right: float | None
+        """Clearance to the next element or shifting range boundary if the element is a free element"""
+        dof: int | None
+        """Degree of freedom index of the element in the parametrized setup if it is a free element"""
+        sensitivity: float | None
+        """Sensitivity of the element, if it is a free element"""
+        grad_focus: float | None
+        """Gradient of the final beam focus with respect to the element position if it is a free element"""
+        grad_waist: float | None
+        """Gradient of the final beam waist with respect to the element position if it is a free element"""
+        sensitivities: np.ndarray | None
+        """Sensitivity vector of the element with respect to all degrees of freedom if it is a free element"""
+        couplings: np.ndarray | None
+        """Coupling vector of the element with respect to all degrees of freedom if it is a free element"""
+        shifting_range: ShiftingRange | None
+        """The shifting range the element belongs to if it is a free element"""
+
+    @cached_property
+    def element_summary(self) -> list[ElementInfo]:
+        """A summary of the elements in the mode matching solution.
 
         Returns:
-            A DataFrame containing the summary data with one row per value, see :meth:`summary` for details.
+            A list of dictionaries containing the summary data for each element, see :class:`ElementInfo` for details.
         """
 
-        summary_data = self.summary(sensitivity_unit=sensitivity_unit)
-        return pd.DataFrame([summary_data]).T
+        candidate = self.solution.candidate
+
+        index_to_range: list[ShiftingRange | None] = []  # mapping from element index to potential shifting range
+        for elem_or_index in candidate.problem.interleaved_elements:
+            match elem_or_index:
+                case int(index):
+                    index_to_range.extend([candidate.problem.ranges[index]] * len(candidate.populations[index]))
+                case (_, _):
+                    index_to_range.append(None)
+
+        infos = []
+        elements = self.solution.setup.elements
+        for i, (pos, element) in enumerate(elements):
+            entry = {
+                "element": element,
+                "shape": element.shape,
+                "focal_length": element.focal_length,
+                "position": pos,
+                "clearance_left": None,
+                "clearance_right": None,
+                "dof": None,
+                "sensitivity": None,
+                "grad_focus": None,
+                "grad_waist": None,
+                "sensitivities": None,
+                "couplings": None,
+                "shifting_range": None,
+                # TODO add focus and waist sensitivities?
+            }
+            if (shifting_range := index_to_range[i]) is not None:
+                entry["shifting_range"] = shifting_range
+                entry["dof"] = candidate.parametrized_setup.free_elements.index(i)
+                entry["sensitivity"] = self.sensitivities[entry["dof"], entry["dof"]]
+                entry["clearance_left"] = pos - shifting_range.left - element.left_margin
+                entry["clearance_right"] = shifting_range.right - pos - element.right_margin
+                if i - 1 >= 0 and index_to_range[i - 1] == shifting_range:
+                    prev_pos, prev_element = elements[i - 1]
+                    entry["clearance_left"] = pos - prev_pos - prev_element.right_margin - element.left_margin
+                if i + 1 < len(elements) and index_to_range[i + 1] == shifting_range:
+                    next_pos, next_element = elements[i + 1]
+                    entry["clearance_right"] = next_pos - pos - element.right_margin - next_element.left_margin
+                entry["grad_focus"] = self.grad_focus[entry["dof"]]
+                entry["grad_waist"] = self.grad_waist[entry["dof"]]
+                entry["sensitivities"] = self.sensitivities[entry["dof"], :]
+                entry["couplings"] = self.couplings[entry["dof"], :]
+
+            infos.append(entry)
+
+        return infos
+
+    def element_summary_df(
+        self,
+        axial_unit: LengthUnit | None = None,
+        radial_unit: LengthUnit | None = None,
+        fraction_unit: FractionUnit | None = None,
+        sensitivity_unit: SensitivityUnit | None = None,
+    ) -> pd.DataFrame:
+        """Create a summary DataFrame of the elements in the solution.
+
+        Args:
+            axial_unit: Unit to use for the axial quantities along the beam, i.e., the coordinate along the beam.
+                If ``None``, this defaults to :attr:`Config.Units.axial <corset.config.Config.Units.axial>`.
+            radial_unit: Unit to use for the radial across the beam, i.e., the beam radius.
+                If ``None``, this defaults to :attr:`Config.Units.radial <corset.config.Config.Units.radial>`.
+            fraction_unit: Unit for fractional quantities, i.e., the mode overlap and coupling coefficients.
+                If ``None``, this defaults to :attr:`Config.Units.fraction <corset.config.Config.Units.fraction>`.
+            sensitivity_unit: Unit for sensitivity quantities, i.e., the overlap lost for a certain squared displacement.
+                If ``None``, this defaults to :attr:`Config.Units.sensitivity <corset.config.Config.Units.sensitivity>`.
+
+        Returns:
+            A DataFrame containing the summary data for each element, see :meth:`element_summary` for details.
+        """
+
+        fraction_unit = Config.get(fraction_unit, Config.Units.fraction)
+        sensitivity_unit = Config.get(sensitivity_unit, Config.Units.sensitivity)
+        radial_unit = Config.get(radial_unit, Config.Units.radial)
+        axial_unit = Config.get(axial_unit, Config.Units.axial)
+        axial_per_axial_unit = axial_unit / axial_unit
+        radial_per_axial_unit = radial_unit / axial_unit
+
+        formatters = {
+            "focal_length": axial_unit.format,
+            "position": axial_unit.format,
+            "sensitivity": sensitivity_unit.format,
+            "clearance_left": axial_unit.format,
+            "clearance_right": axial_unit.format,
+            "dof": lambda x: str(int(x)),  # handle pandas converting column to float when there are NaNs
+            "grad_focus": axial_per_axial_unit.format,
+            "grad_waist": radial_per_axial_unit.format,
+            "sensitivities": sensitivity_unit.format,
+            "couplings": fraction_unit.format,
+        }
+
+        return FormattedDataFrame(self.element_summary, formatters=formatters)  # pyright: ignore[reportCallIssue]

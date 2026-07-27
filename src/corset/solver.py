@@ -10,6 +10,7 @@ The actual constrained optimization is carried out using :func:`scipy.optimize.m
 All solutions will then be collected in a :class:`SolutionList` for convenient analysis and filtering.
 """
 
+import base64
 import hashlib
 import os
 import warnings
@@ -31,7 +32,9 @@ with warnings.catch_warnings():
 
 
 from .analysis import ModeMatchingAnalysis
+from .config import Config
 from .core import Beam, Lens, OpticalSetup
+from .display import FormattedDataFrame, FractionUnit, LengthUnit, SensitivityUnit
 from .plot import (
     fig_to_png,
     plot_mode_match_solution_all,
@@ -231,6 +234,7 @@ class ModeMatchingProblem(YamlSerializableMixin):
     def __post_init__(self):
         self._verify_selection()
         self._verify_no_overlaps()
+        self._verify_order()
         if self.setup.initial_beam.wavelength != self.desired_beam.wavelength:
             # testing for equality of floats should be fine here since they should come from the same source
             raise ValueError("Setup initial beam and desired beam must have the same wavelength.")
@@ -263,6 +267,11 @@ class ModeMatchingProblem(YamlSerializableMixin):
         for r1, r2 in pairwise(regions):
             if r1[1] > r2[0]:
                 raise ValueError(f"Overlapping regions/elements detected: {r1[2]} and {r2[2]}.")
+
+    def _verify_order(self):
+        for first, second in pairwise(self.ranges):
+            if first.left > second.left:
+                raise ValueError(f"Out of order ranges detected: {first} and {second}.")
 
     @cached_property
     def raw_radius_constraints(self) -> list[tuple[float, float]]:
@@ -613,9 +622,33 @@ class ModeMatchingSolution(YamlSerializableMixin):
     plot_sensitivity = plot_sensitivity  #: Plot the sensitivity analysis, see :func:`corset.plot.plot_sensitivity`
     plot_all = plot_mode_match_solution_all  #: Plot all analyses, see :func:`corset.plot.plot_mode_match_solution_all`
 
-    def _repr_png_(self) -> bytes:
+    def _repr_mimebundle_(self, include: None = None, exclude: None = None) -> dict[str, Any]:
+        # use the single mime bundle method to avoid generating the plot twice for the png and html representations
         fig, _ = self.plot_all()
-        return fig_to_png(fig)
+        image_bytes = fig_to_png(fig)
+
+        table_html = f"{self.analysis.element_summary_df().to_html(notebook=True, columns=Config.Repr.solution_element_summary_columns)}"
+        match Config.Repr.solution_element_summary:
+            case "show":
+                element_summary_html = f"{table_html}<br>"
+            case "hide":
+                element_summary_html = ""
+            case "expanded":
+                element_summary_html = f"<details open><summary>Element Summary</summary>{table_html}</details><br>"
+            case "collapsed":
+                element_summary_html = f"<details><summary>Element Summary</summary>{table_html}</details><br>"
+            case invalid:
+                raise ValueError(f"Invalid value for element_summary: {invalid}")
+
+        html = f"""{element_summary_html}
+        <img src="data:image/png;base64,{base64.b64encode(image_bytes).decode()}" alt="Mode Matching Solution Plot" />
+        """
+
+        return {
+            "text/plain": repr(self),
+            "text/html": html,
+            "image/png": image_bytes,
+        }
 
     @cached_property
     def analysis(self) -> "ModeMatchingAnalysis":
@@ -720,13 +753,61 @@ class SolutionList(YamlSerializableMixin):
     def __iter__(self) -> Iterator[ModeMatchingSolution]:
         return iter(self.solutions)
 
-    @cached_property
-    def df(self) -> pd.DataFrame:
-        """DataFrame representation of the solutions for convenient analysis."""
-        return pd.DataFrame([sol.analysis.summary() for sol in self.solutions])
+    def display_all(self, force_mime: str | None = None) -> None:
+        """Display all solutions using IPython's display system.
+
+        Mostly equivalent to :code:`display(*self)`.
+
+        Args:
+            force_mime: If specified, only display the given mime type (e.g., "text/html" or "image/png"),
+            forcing the frontend to use that representation. If ``None``, all available mime types are
+            available for selection.
+        """
+
+        from IPython.display import display
+
+        # use a loop instead of a single call to show plots as they are being generated
+        for sol in self.solutions:
+            bundle = sol._repr_mimebundle_()
+            if force_mime is not None:
+                bundle = {force_mime: bundle[force_mime]}
+            display(bundle, raw=True)
+
+    def df(
+        self,
+        axial_unit: LengthUnit | None = None,
+        radial_unit: LengthUnit | None = None,
+        fraction_unit: FractionUnit | None = None,
+        sensitivity_unit: SensitivityUnit | None = None,
+    ) -> pd.DataFrame:
+        """Create a DataFrame representation of the solutions for convenient analysis.
+
+        Args:
+            axial_unit: Unit to use for the axial quantities along the beam, i.e., the coordinate along the beam.
+                If ``None``, this defaults to :attr:`Config.Units.axial <corset.config.Config.Units.axial>`.
+            radial_unit: Unit to use for the radial across the beam, i.e., the beam radius.
+                If ``None``, this defaults to :attr:`Config.Units.radial <corset.config.Config.Units.radial>`.
+            fraction_unit: Unit for fractional quantities, i.e., the mode overlap and coupling coefficients.
+                If ``None``, this defaults to :attr:`Config.Units.fraction <corset.config.Config.Units.fraction>`.
+            sensitivity_unit: Unit for sensitivity quantities, i.e., the overlap lost for a certain squared displacement.
+                If ``None``, this defaults to :attr:`Config.Units.sensitivity <corset.config.Config.Units.sensitivity>`.
+
+        Returns:
+            A :class:`pandas.DataFrame` representation of the solutions with columns for the solution
+            properties and analysis results, formatted according to the specified units.
+        """
+        return FormattedDataFrame(
+            [sol.analysis.summary for sol in self.solutions],
+            formatters=ModeMatchingAnalysis._summary_formatters(
+                fraction_unit=fraction_unit,
+                sensitivity_unit=sensitivity_unit,
+                radial_unit=radial_unit,
+                axial_unit=axial_unit,
+            ),
+        )  # pyright: ignore[reportCallIssue]
 
     def _repr_html_(self) -> str:
-        return self.df.to_html(notebook=True)
+        return self.df().to_html(notebook=True, columns=Config.Repr.solution_summary_columns)
 
     def filter(self, predicate: Callable[[ModeMatchingSolution], bool]) -> "SolutionList":
         """Filter solutions based on a predicate function.
@@ -748,7 +829,7 @@ class SolutionList(YamlSerializableMixin):
         Returns:
             A new :class:`SolutionList` containing only the solutions that satisfy the query.
         """
-        return self[cast(list[int], self.df.query(expr).index)]
+        return self[cast(list[int], self.df().query(expr).index)]
 
     def sorted(self, key: Callable[[ModeMatchingSolution], float], reverse: bool = False) -> "SolutionList":
         """Sort solutions based on a key function.
@@ -775,7 +856,7 @@ class SolutionList(YamlSerializableMixin):
         Returns:
             A new :class:`SolutionList` with solutions sorted by the specified columns.
         """
-        return self[cast(list[int], self.df.sort_values(by=by, ascending=ascending, key=key).index)]
+        return self[cast(list[int], self.df().sort_values(by=by, ascending=ascending, key=key).index)]
 
 
 # TODO should this be a method of ModeMatchingProblem?

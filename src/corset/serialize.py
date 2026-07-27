@@ -1,3 +1,5 @@
+"""YAML serialization helpers for dataclasses and common built-in types."""
+
 from dataclasses import fields
 from pathlib import Path
 from typing import Any, Self

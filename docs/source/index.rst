@@ -64,6 +64,7 @@ Contents
    config
    core
    database
+   display
    plot
    serialize
    solver

@@ -176,6 +176,8 @@ class ThinLens(YamlSerializableMixin):
     right_margin: float = 0.0  #: Physical size to the right of the focal plane
     name: str | None = None  #: Name for reference and plotting
 
+    shape: ClassVar[str] = "|"  #: ASCII lens shape representation
+
     def __post_init__(self):
         if self.focal_length == 0:
             raise ValueError("Focal length cannot be zero.")
@@ -213,6 +215,8 @@ class ThickLens(YamlSerializableMixin):
     FLAT: ClassVar[float] = float("inf")  #: Surface radius representing a flat surface
 
     def __post_init__(self):
+        if self.in_roc == 0 or self.out_roc == 0:
+            raise ValueError("Radii of curvature cannot be zero.")
         if self.thickness <= 0:
             raise ValueError("Lens thickness must be positive.")
         if self.refractive_index <= 1:
@@ -238,6 +242,13 @@ class ThickLens(YamlSerializableMixin):
         if np.isinf(r1) and np.isinf(r2):
             return float("nan")
         return 1 / ((n2 - 1) * (1 / r1 - 1 / r2 + ((n2 - 1) * self.thickness) / (n2 * r1 * r2)))
+
+    @cached_property
+    def shape(self) -> str:
+        """ASCII lens shape representation."""
+        left_surface = "[" if np.isinf(self.in_roc) else ("(" if self.in_roc > 0 else ")")
+        right_surface = "]" if np.isinf(self.out_roc) else (")" if self.out_roc < 0 else "(")
+        return left_surface + right_surface
 
     def __str__(self) -> str:
         return self.name if self.name is not None else f"f≈{round(self.focal_length * 1e3)}mm"

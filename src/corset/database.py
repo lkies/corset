@@ -44,9 +44,11 @@ import numpy as np
 import pandas as pd
 
 import corset
-from corset.serialize import YamlSerializableMixin
 
+from .config import Config
 from .core import Lens, ThickLens, ThinLens
+from .display import FormattedDataFrame, LengthUnit
+from .serialize import YamlSerializableMixin
 
 
 @dataclass(frozen=True)
@@ -114,14 +116,24 @@ class LensList(YamlSerializableMixin):
             raise ValueError("Lens names must be unique.")
         return {lens.name: lens for lens in self.lenses if lens.name}
 
-    @cached_property
-    def df(self) -> pd.DataFrame:
-        """A :class:`pandas.DataFrame` representation of the lens list."""
+    def df(self, axial_unit: LengthUnit | None = None) -> pd.DataFrame:
+        """Create a :class:`pandas.DataFrame` representation of the lens list.
+
+        Args:
+            axial_unit: Unit to use for the axial quantities along the beam, i.e., the coordinate along the beam.
+                If ``None``, this defaults to :attr:`Config.Units.axial <corset.config.Config.Units.axial>`.
+
+        Returns:
+            pd.DataFrame: A DataFrame representation of the lens list.
+        """
+        axial_unit = Config.get(axial_unit, Config.Units.axial)
+
         df = pd.DataFrame(
             [
                 {
                     "name": lens.name,
                     "type": {ThinLens: "thin", ThickLens: "thick"}[type(lens)],
+                    "shape": lens.shape,
                     "focal_length": lens.focal_length,
                     "left_margin": lens.left_margin,
                     "right_margin": lens.right_margin,
@@ -136,10 +148,21 @@ class LensList(YamlSerializableMixin):
         )
         if self.lenses and all(df["type"] == "thin"):
             df = df.drop(columns=["in_roc", "out_roc", "thickness", "refractive_index"])
-        return df
+
+        formatters = {
+            "focal_length": axial_unit.format,
+            "left_margin": axial_unit.format,
+            "right_margin": axial_unit.format,
+            "in_roc": axial_unit.format,
+            "out_roc": axial_unit.format,
+            "thickness": axial_unit.format,
+            "lens": lambda obj: f"{obj.__class__.__name__}(...)",
+        }
+
+        return FormattedDataFrame(df, formatters=formatters)  # pyright: ignore[reportCallIssue]
 
     def _repr_html_(self) -> str:
-        return self.df.to_html(notebook=True)
+        return self.df().to_html(notebook=True, columns=Config.Repr.lens_list_columns)
 
     def save_csv(self, path: str | Path) -> None:
         """Save the lens list to a CSV file.
@@ -148,7 +171,7 @@ class LensList(YamlSerializableMixin):
             path: Path to the CSV file. This is passed directly to :func:`pandas.DataFrame.to_csv` so it also
                 accepts other types supported by that function like file-like objects.
         """
-        self.df.drop(columns=["lens"]).to_csv(path, index=False)
+        self.df().drop(columns=["shape", "lens"]).to_csv(path, index=False)
 
     @classmethod
     def load_csv(cls, *paths: str | Path) -> "LensList":

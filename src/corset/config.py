@@ -3,34 +3,18 @@
 # TODO is it a reasonable idea to just use this as a namespace?
 # ideally these would just be values in this module but that would lead to bind by value issues when importing
 import typing
-from enum import Enum
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import to_rgb
 
+from .display import FractionUnit, LengthUnit, SensitivityUnit, Units
+
 T = typing.TypeVar("T")
 
 
-class Unit(typing.NamedTuple):
-    """Unit representation with ASCII and LaTeX strings and conversion factor to base unit."""
-
-    ascii: str  #: ASCII representation of the unit
-    tex: str  #: LaTeX representation of the unit
-    factor: float  #: Conversion factor to the SI base unit
-
-
 class Config:
-    """Configuration namespace for the mode matching solver."""
-
-    class SensitivityUnit(Enum):
-        """Units for sensitivity analysis."""
-
-        PER_M2 = Unit(ascii="%/m^2", tex=r"\%/\mathrm{m}^2", factor=1)  #:
-        PERCENT_PER_MM2 = Unit(ascii="%/mm^2", tex=r"\%/\mathrm{mm}^2", factor=1e2 * (1e-3**2))  #:
-        PERCENT_PER_CM2 = Unit(ascii="%/cm^2", tex=r"\%/\mathrm{cm}^2", factor=1e2 * (1e-2**2))  #:
-
-    sensitivity_unit = SensitivityUnit.PERCENT_PER_CM2  #: Unit for sensitivity analyses
+    """Configuration namespace for Beam Corset."""
 
     overwrite_dark_theme: bool | None = None  #: Override automatic detection of dark theme in plots
 
@@ -47,11 +31,20 @@ class Config:
         bg_color = to_rgb(plt.rcParams["figure.facecolor"])
         return bool(np.mean(bg_color[:3]) < 0.5)
 
+    class Units:
+        """Configuration of default units for displaying values in plots and tables."""
+
+        axial: LengthUnit = Units.Length.MILLIMETER  #: Unit for axial length unit display
+        radial: LengthUnit = Units.Length.MICROMETER  #: Unit for radial length unit display
+        fraction: FractionUnit = Units.Fraction.PERCENT  #: Unit for overlap display
+        sensitivity: SensitivityUnit = Units.Sensitivity.PERCENT_PER_CENTIMETER2
+        """Unit for sensitivity analysis display"""
+
     class Overlap:
         """Configuration of default values for overlap contour plots."""
 
-        levels: typing.ClassVar[list[float]] = [80, 90, 95, 98, 99, 99.5, 99.8, 99.9, 100]
-        """Overlap levels in percent."""
+        levels: typing.ClassVar[list[float]] = [0.8, 0.9, 0.95, 0.98, 0.99, 0.995, 0.998, 0.999, 1.0]
+        """Overlap levels as fractions."""
         colormap: str = "turbo"
         """Colormap for overlap levels."""
         grid_resolution: int = 50
@@ -156,3 +149,20 @@ class Config:
             The provided value or the default.
         """
         return default if value is None else value
+
+    class Repr:
+        """Configuration IPython display representations."""
+
+        solution_element_summary: typing.Literal["show", "hide", "expanded", "collapsed"] = "collapsed"
+        """Whether to show the element summary table in the solution representation. Options are:
+        - ``"show"``: Show the table.
+        - ``"hide"``: Do not show the table.
+        - ``"expanded"``: Show the table in an expanded details view.
+        - ``"collapsed"``: Show the table in a collapsed details view.
+        """
+        solution_element_summary_columns: list[str] | None = None
+        """Subset of columns to show in the solution element summary table. If ``None``, all columns are shown."""
+        solution_summary_columns: list[str] | None = None
+        """Subset of columns to show in the solution summary table. If ``None``, all columns are shown."""
+        lens_list_columns: list[str] | None = None
+        """Subset of columns to show in the lens list representation table. If ``None``, all columns are shown."""
