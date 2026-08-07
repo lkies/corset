@@ -828,6 +828,12 @@ class SolutionList(YamlSerializableMixin):
 
         Returns:
             A new :class:`SolutionList` containing only the solutions that satisfy the query.
+
+        .. note::
+            The actual values in the data frame are always stored in their respective SI basis
+            unit so the quantity to compare with must also be specified in that basis unit.
+            This can easily be achieved by multiplying it with the respective unit from
+            :class:`display.Units <corset.display.Units>` which will perform the conversion.
         """
         return self[cast(list[int], self.df().query(expr).index)]
 

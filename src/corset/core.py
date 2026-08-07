@@ -46,6 +46,11 @@ class Beam(YamlSerializableMixin):
         return np.sqrt(self.rayleigh_range * self.wavelength / np.pi)
 
     @cached_property
+    def waist_dev(self) -> float | None:
+        """Waist radius (standard) deviation"""
+        return None if self.gauss_cov is None else self.gauss_cov[1, 1] ** 0.5
+
+    @cached_property
     def rayleigh_range(self) -> float:
         """Rayleigh range"""
         return abs(self.beam_parameter.imag)
@@ -54,6 +59,11 @@ class Beam(YamlSerializableMixin):
     def focus(self) -> float:
         """Axial position of the beam focus i.e. waist position"""
         return self.z_offset - self.beam_parameter.real
+
+    @cached_property
+    def focus_dev(self) -> float | None:
+        """Axial position of the beam focus (standard) deviation"""
+        return None if self.gauss_cov is None else self.gauss_cov[0, 0] ** 0.5
 
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
         """Compute the beam radius at axial position(s).
