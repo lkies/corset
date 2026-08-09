@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
+from .config import Config
 from .plot import OpticalSetupPlot, fig_to_png, plot_setup
 from .serialize import YamlSerializableMixin
 
@@ -38,7 +39,20 @@ class Beam(YamlSerializableMixin):
     z_offset: float  #: Axial position at which the ray is defined
     wavelength: float  #: Wavelength of the beam
     gauss_cov: np.ndarray | None = None  #: 2x2 covariance matrix for focus position and waist
-    # range: tuple[float, float] # TODO is this necessary
+    fit_data: tuple[np.ndarray, np.ndarray] | None = None
+    """Data points that were used to fit the beam parameters (positions, radii)"""
+
+    def __post_init__(self):
+        if self.wavelength <= 0:
+            raise ValueError("Wavelength must be positive.")
+        if self.gauss_cov is not None and (
+            self.gauss_cov.shape != (2, 2) or np.all(np.linalg.eigvals(self.gauss_cov) <= 0)
+        ):
+            raise ValueError("Covariance matrix must be 2x2 and positive definite.")
+        if self.fit_data is not None and (
+            len(self.fit_data[0]) != len(self.fit_data[1]) or not np.all(self.fit_data[0][1:] > self.fit_data[0][:-1])
+        ):
+            raise ValueError("Fit data positions must be ascending and match the length of the radii array.")
 
     @cached_property
     def waist(self) -> float:
@@ -156,7 +170,14 @@ class Beam(YamlSerializableMixin):
         (focus, waist), cov = curve_fit(
             lambda z, f, w: cls.from_gauss(f, w, wavelength).radius(z), positions, radii, p0=p0
         )
-        return cls.from_gauss(focus, waist, wavelength, cov=cov)
+
+        return cls(
+            beam_parameter=1j * np.pi * (waist**2) / wavelength,
+            z_offset=focus,
+            wavelength=wavelength,
+            gauss_cov=cov,
+            fit_data=(np.sort(positions), np.array(radii)[np.argsort(positions)]),
+        )
 
     def plot(self, **kwargs) -> OpticalSetupPlot:  # pyright: ignore[reportPrivateImportUsage]
         """Plot the beam as part of an optical setup with no other elements.
@@ -167,7 +188,6 @@ class Beam(YamlSerializableMixin):
         Returns:
             OpticalSetupPlot instance for further customization.
         """
-
         return OpticalSetup(self, []).plot(**kwargs)
 
     def _repr_png_(self) -> bytes:
@@ -200,7 +220,8 @@ class ThinLens(YamlSerializableMixin):
         return np.array([[1, 0], [-1 / self.focal_length, 1]])
 
     def __str__(self) -> str:
-        return self.name if self.name is not None else f"f={round(self.focal_length * 1e3)}mm"
+        unit = Config.Units.axial
+        return self.name if self.name is not None else f"f={unit.format(self.focal_length).replace(' ', '')}"
 
 
 @dataclass(frozen=True)
@@ -261,7 +282,8 @@ class ThickLens(YamlSerializableMixin):
         return left_surface + right_surface
 
     def __str__(self) -> str:
-        return self.name if self.name is not None else f"f≈{round(self.focal_length * 1e3)}mm"
+        unit = Config.Units.axial
+        return self.name if self.name is not None else f"f≈{unit.format(self.focal_length).replace(' ', '')}"
 
 
 Lens = ThinLens | ThickLens  #: Lens type union
@@ -321,7 +343,7 @@ class OpticalSetup(YamlSerializableMixin):
 
     @cached_property
     def beams_fast(self) -> list[Beam]:
-        """Compute the Beam instances without propagating covariances."""
+        """Compute the Beam instances without propagating covariances and attaching fit data."""
         return [self.initial_beam] + [
             Beam(beam_parameter=param, z_offset=pos, wavelength=self.initial_beam.wavelength)
             for (pos, _), param in zip(self.elements, self.beam_parameters[1:], strict=True)
@@ -330,12 +352,31 @@ class OpticalSetup(YamlSerializableMixin):
     @cached_property
     def beams(self) -> list[Beam]:
         """Compute the Beam instances between elements including before the first element and after the last."""
-        return [self.initial_beam] + [
-            Beam(beam_parameter=param, z_offset=pos, wavelength=self.initial_beam.wavelength, gauss_cov=cov)
-            for (pos, _), param, cov in zip(
-                self.elements, self.beam_parameters[1:], self.gauss_covariances[1:], strict=True
+        fit_positions = self.initial_beam.fit_data[0] if self.initial_beam.fit_data is not None else np.array([])
+        fit_radii = self.initial_beam.fit_data[1] if self.initial_beam.fit_data is not None else np.array([])
+        make_fit_data = lambda start, stop: (fit_positions[start:stop], fit_radii[start:stop]) if start < stop else None
+
+        start_index = 0
+        beams = []
+        for (pos, _), (end, _), param, cov in zip(
+            [(self.initial_beam.z_offset, ...), *self.elements],
+            [*self.elements, (float("inf"), ...)],
+            self.beam_parameters,
+            self.gauss_covariances,
+            strict=True,
+        ):
+            stop_index = np.searchsorted(fit_positions, end)
+            beam = Beam(
+                beam_parameter=param,
+                z_offset=pos,
+                wavelength=self.initial_beam.wavelength,
+                gauss_cov=cov,
+                fit_data=make_fit_data(start_index, stop_index),
             )
-        ]
+            beams.append(beam)
+            start_index = stop_index
+
+        return beams
 
     # TODO optimize this to pass data to beams in batches?
     def radius(self, z: float | np.ndarray) -> float | np.ndarray:
@@ -354,7 +395,7 @@ class OpticalSetup(YamlSerializableMixin):
         return self.beams[index].radius_dev(z)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     @classmethod
-    def fit(
+    def fit(  # noqa: C901
         cls,
         positions: np.ndarray,
         radii: np.ndarray,
@@ -420,7 +461,13 @@ class OpticalSetup(YamlSerializableMixin):
             if abs(pos - upper) < 1e-6:
                 warnings.warn(f"Fitted position of element {i} is at upper bound {upper}.", stacklevel=2)
 
-        beam = Beam.from_gauss(focus, waist, wavelength, cov=cov[:2, :2])
+        beam = Beam(
+            beam_parameter=1j * np.pi * (waist**2) / wavelength,
+            z_offset=focus,
+            wavelength=wavelength,
+            gauss_cov=cov[:2, :2],
+            fit_data=(np.sort(positions), np.array(radii)[np.argsort(positions)]),
+        )
         try:
             setup = cls(initial_beam=beam, elements=substitute_positions(fitted_positions))
         except ValueError as e:

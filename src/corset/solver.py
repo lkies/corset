@@ -753,6 +753,8 @@ class SolutionList(YamlSerializableMixin):
     def __iter__(self) -> Iterator[ModeMatchingSolution]:
         return iter(self.solutions)
 
+    # TODO add possibility to make all analysis plots with the same automatically determined ranges?
+    # or forward plot arguments to the plot functions?
     def display_all(self, force_mime: str | None = None) -> None:
         """Display all solutions using IPython's display system.
 

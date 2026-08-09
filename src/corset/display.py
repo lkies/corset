@@ -108,14 +108,13 @@ class Unit:
             uncertainty_str = f" {pm} {dev / self.factor:.{decimals}f}" if dev is not None else ""
             number_str = f"{value_str}{uncertainty_str}"
             number_str = f"({number_str})" if dev is not None and unit_str else number_str
-            res = f"{number_str}{unit_str}"
+            return f"{number_str}{unit_str}"
         elif isinstance(value, np.ndarray):
-            res = f"{np.array2string(value / self.factor, precision=decimals, separator=', ', threshold=array_threshold)}{unit_str}"
+            return f"{np.array2string(value / self.factor, precision=decimals, separator=', ', threshold=array_threshold)}{unit_str}"
         elif isinstance(value, list):
-            res = f"{np.array2string(np.array(value) / self.factor, precision=decimals, separator=', ', threshold=array_threshold)}{unit_str}"
+            return f"{np.array2string(np.array(value) / self.factor, precision=decimals, separator=', ', threshold=array_threshold)}{unit_str}"
         else:
             raise TypeError(f"Unsupported type {type(value)} for formatting with unit {self.unicode}")
-        return f"${res}$" if tex else res
 
     def __mul__(self, other: float | np.ndarray) -> float | np.ndarray:
         return other * self.factor

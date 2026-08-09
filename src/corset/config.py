@@ -79,6 +79,8 @@ class Config:
         """The kwargs to pass to :meth:`~matplotlib.axes.Axes.fill_between`"""
         confidence_interval: float | bool = 0.95
         """Confidence interval for the beam envelope. If ``False``, no confidence interval is shown."""
+        show_fit_data: bool = True
+        """Whether to plot the data points that were used to fit the beam(s)."""
 
     class PlotSolution:
         """Configuration of default values for mode matching solution plots."""
@@ -130,7 +132,7 @@ class Config:
         """Width ratios for the three subplots in the overview plot."""
         tight_layout: bool = True
         """Whether to use tight layout for the overview plot."""
-        setup_kwargs: typing.ClassVar[dict] = {}
+        setup_kwargs: typing.ClassVar[dict] = {"setup_kwargs": {"show_fit_data": False}}
         """Keyword arguments to pass to the setup plot."""
         reachability_kwargs: typing.ClassVar[dict] = {}
         """Keyword arguments to pass to the reachability plot."""

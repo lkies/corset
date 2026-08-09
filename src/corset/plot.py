@@ -86,6 +86,7 @@ class OpticalSetupPlot:
     rs: np.ndarray  #: Radii of the beam profile
     beam: FillBetweenPolyCollection  #: Fill between collection for the beam
     beam_ci: list[Line2D]  #: List of lines representing beam confidence intervals
+    fit_data: PathCollection | None  #: Scatter plot of the fit data points
     lenses: list[tuple[LineCollection, Annotation, Rectangle | None]]  #: List of lens plot elements
     handles: list[tuple[Any, str]]  #: List of plot handles by their legend labels
     r_max: float  #: Maximum beam radius in the plot
@@ -121,6 +122,38 @@ def get_handles(ax: Axes) -> list[tuple[Any, str]]:
     return [(handle, text.get_text()) for handle, text in zip(legend.legend_handles, legend.texts, strict=True)]
 
 
+# TODO include mode matching elements in computation?
+def _beam_limits(setup: OpticalSetup, rayleigh_range_cap: float, show_fit_data: bool) -> tuple[float, float]:
+    beam_and_element_corners = (
+        [setup.beams[0].focus, setup.beams[-1].focus]
+        + [min(pos, pos - elem.left_margin) for pos, elem in setup.elements]
+        + [max(pos, pos + elem.right_margin) for pos, elem in setup.elements]
+    )
+    left_rayleigh_bound = min(beam_and_element_corners) - min(rayleigh_range_cap, setup.beams[0].rayleigh_range)
+    right_rayleigh_bound = max(beam_and_element_corners) + min(rayleigh_range_cap, setup.beams[-1].rayleigh_range)
+
+    left_data_bound = float("inf")
+    right_data_bound = float("-inf")
+
+    if show_fit_data:
+        if setup.beams[0].fit_data is not None:
+            left_data_bound = np.min(setup.beams[0].fit_data[0])
+        if setup.beams[-1].fit_data is not None:
+            right_data_bound = np.max(setup.beams[-1].fit_data[0])
+
+        FIT_DATA_MARGIN_FACTOR = 0.1  # noqa: N806
+        right_scaling_bound = right_data_bound if np.isfinite(right_data_bound) else right_rayleigh_bound
+        left_scaling_bound = left_data_bound if np.isfinite(left_data_bound) else left_rayleigh_bound
+        width = right_scaling_bound - left_scaling_bound
+        left_data_bound -= width * FIT_DATA_MARGIN_FACTOR
+        right_data_bound += width * FIT_DATA_MARGIN_FACTOR
+
+    left_bound = left_data_bound if np.isfinite(left_data_bound) else left_rayleigh_bound
+    right_bound = right_data_bound if np.isfinite(right_data_bound) else right_rayleigh_bound
+
+    return left_bound, right_bound
+
+
 # TODO refactor this function to reduce complexity
 def plot_setup(  # noqa: C901
     self: "OpticalSetup",
@@ -130,6 +163,7 @@ def plot_setup(  # noqa: C901
     limits: tuple[float, float] | None = None,
     beam_kwargs: dict | None = None,
     confidence_interval: float | bool | None = None,
+    show_fit_data: bool | None = None,
     rayleigh_range_cap: float | None = None,
     free_lenses: list[int] = [],  # noqa: B006
     show_legend: bool | None = None,
@@ -149,9 +183,11 @@ def plot_setup(  # noqa: C901
             If ``None``, limits are determined from the beam and elements.
         beam_kwargs: Additional keyword arguments passed to the beam plot.
             If ``None`` this defaults to :attr:`Config.PlotSetup.beam_kwargs <corset.config.Config.PlotSetup.beam_kwargs>`.
-        confidence_interval: Confidence interval probability for beam uncertainty visualization.
-            If ``False``, no uncertainty is plotted.
+        confidence_interval: Confidence interval probability for beam uncertainty visualization and labeling.
+            If ``False``, no uncertainty is plotted or shown.
             If ``None`` this defaults to :attr:`Config.PlotSetup.confidence_interval <corset.config.Config.PlotSetup.confidence_interval>`.
+        show_fit_data: Whether to show the fit data points.
+            If ``None``, this defaults to :attr:`Config.PlotSetup.show_fit_data <corset.config.Config.PlotSetup.show_fit_data>`.
         rayleigh_range_cap: Maximum Rayleigh range to consider when determining plot limits.
             If ``None`` this defaults to :attr:`Config.PlotSetup.rayleigh_range_cap <corset.config.Config.PlotSetup.rayleigh_range_cap>`.
         free_lenses: Indices of lenses to treat as free elements in the plot.
@@ -176,6 +212,7 @@ def plot_setup(  # noqa: C901
         raise ValueError("confidence_interval cannot be True, must be a float between 0 and 1 or False")
     confidence_interval = Config.get(confidence_interval, Config.PlotSetup.confidence_interval)
     rayleigh_range_cap = Config.get(rayleigh_range_cap, Config.PlotSetup.rayleigh_range_cap)
+    show_fit_data = Config.get(show_fit_data, Config.PlotSetup.show_fit_data)
     axial_unit = Config.get(axial_unit, Config.Units.axial)
     radial_unit = Config.get(radial_unit, Config.Units.radial)
 
@@ -199,24 +236,11 @@ def plot_setup(  # noqa: C901
             "zorder": 150,
         }
 
-    lens_positions = [pos for pos, _ in self.elements]
-
     if isinstance(points, np.ndarray):
         zs = points
     else:
         if not limits:
-            cap = rayleigh_range_cap
-            all_bounds = [
-                self.beams[0].focus - min(cap, self.beams[0].rayleigh_range),
-                self.beams[-1].focus + min(cap, self.beams[-1].rayleigh_range),
-                *(),
-                *lens_positions,
-            ]
-            if self.elements:
-                all_bounds.append(self.elements[0][0] - min(cap, self.beams[0].rayleigh_range))
-                all_bounds.append(self.elements[-1][0] + min(cap, self.beams[-1].rayleigh_range))
-
-            limits = (min(all_bounds), max(all_bounds))
+            limits = _beam_limits(self, rayleigh_range_cap=rayleigh_range_cap, show_fit_data=show_fit_data)
 
         num_points = points if isinstance(points, int) else Config.PlotSetup.beam_points
         zs = np.linspace(limits[0], limits[1], num_points)
@@ -245,18 +269,24 @@ def plot_setup(  # noqa: C901
         # make the legend artist
         handles[-1] = (_CorsetPatch((0, 0), 1, 1, color=beam_kwargs["color"], lace_color=lace_color), beam_label)
 
+    beam_color = beam_kwargs.get("color")
+    if beam_color is None or beam_color == "none":
+        beam_color = beam_kwargs.get("edgecolor")
+
     beam_deviation = []
     if confidence_interval is not False and self.beams[0].gauss_cov is not None:
         rs_ci = self.radius_dev(zs) * stats.norm.interval(confidence_interval)[1]
-        ci_color = beam_kwargs.get("color")
-        if ci_color is None or ci_color == "none":
-            ci_color = beam_kwargs.get("edgecolor")
         for r0, ci in product([-rs, rs], [-rs_ci, rs_ci]):
-            line = ax.plot(zs, r0 + ci, ls="--", color=ci_color, alpha=beam_kwargs.get("alpha"), zorder=105)[0]
+            line = ax.plot(zs, r0 + ci, ls="--", color=beam_color, alpha=beam_kwargs.get("alpha"), zorder=105)[0]
             beam_deviation.append(line)
         r_max = np.max(rs + rs_ci)
         handles.append((beam_deviation[0], f"{round(confidence_interval * 100)}% CI ({beam_label})"))
     # TODO make beam plot function?
+
+    fit_data_scatter = None
+    if show_fit_data and (combined_fit_data := [beam.fit_data for beam in self.beams if beam.fit_data is not None]):
+        fit_data_scatter = ax.scatter(*np.concatenate(combined_fit_data, axis=1), color=beam_color, zorder=110)
+        handles.append((fit_data_scatter, f"Fit Data ({beam_label})"))
 
     # TODO factor out into plot lens function?
     lenses = []
@@ -274,7 +304,7 @@ def plot_setup(  # noqa: C901
 
         label_text = str(lens)
         if i in free_lenses:
-            label_text = f"$L_{i}$: {label_text} @ {axial_unit.format(pos, tex=True)}"
+            label_text = f"$L_{i}$: {label_text} @ ${axial_unit.format(pos, tex=True)}$"
         label = ax.text(
             pos,
             -r_max * (1 + RELATIVE_MARGIN),
@@ -283,7 +313,7 @@ def plot_setup(  # noqa: C901
             ha="left",
             rotation="vertical",
             rotation_mode="anchor",
-            bbox={"fc": plt.rcParams["axes.facecolor"], "ec": "none", "alpha": 0.5},
+            bbox={"fc": plt.rcParams["axes.facecolor"], "ec": "none", "alpha": 0.7},
             zorder=zorder,
         )
 
@@ -323,12 +353,26 @@ def plot_setup(  # noqa: C901
     if show_legend:
         ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
 
+    # show waist location and radius in title if there is only a single beam
+    if not self.elements:
+        make_ci = (
+            (lambda dev: dev * stats.norm.interval(confidence_interval)[1])
+            if confidence_interval is not False and self.beams[0].gauss_cov is not None
+            else lambda _: None
+        )
+
+        ax.set_title(
+            f"$w_0 = {radial_unit.format(self.beams[0].waist, dev=make_ci(self.beams[0].waist_dev), tex=True)}$"
+            f" @ $z_0 = {axial_unit.format(self.beams[0].focus, dev=make_ci(self.beams[0].focus_dev), tex=True)}$"
+        )
+
     return OpticalSetupPlot(
         ax=ax,
         zs=zs,
         rs=rs,
         beam=fill_between,
         beam_ci=beam_deviation,
+        fit_data=fit_data_scatter,
         lenses=lenses,
         handles=handles,
         r_max=r_max,
@@ -376,6 +420,7 @@ def plot_mode_match_solution_setup(  # noqa: C901
 
     problem = self.candidate.problem
 
+    # TODO include all parts of the mode matching problem / solution in automatic range calculation
     setup_plot = plot_setup(
         self.setup,
         ax=ax,
@@ -449,7 +494,7 @@ def plot_mode_match_solution_setup(  # noqa: C901
     if show_legend:
         ax.legend(*zip(*handles, strict=True), loc=legend_loc).set_zorder(1000)
 
-    ax.set_title(f"Optical Setup ({fraction_unit.format(self.overlap, tex=True)} mode overlap)")
+    ax.set_title(f"Optical Setup (${fraction_unit.format(self.overlap, tex=True)}$ mode overlap)")
 
     return ModeMatchingPlot(
         ax=ax,
@@ -787,7 +832,7 @@ def plot_sensitivity(
                     colors=[color],
                 )
         handles = [
-            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}}$ = {axial_unit.format(value, tex=True)}")
+            Line2D([], [], color=color, label=rf"$\Delta x_{{{dimensions[2]}}} = {axial_unit.format(value, tex=True)}$")
             for color, value in zip(z_colors, zs, strict=True)
         ]
         ax.legend(handles=handles, loc="lower left").set_zorder(1000)
@@ -805,16 +850,16 @@ def plot_sensitivity(
     sens_y = self.analysis.sensitivities[dims[1], dims[1]]
     su = sensitivity_unit
     ax.set_xlabel(
-        rf"$\Delta x_{{{dims[0]}}}$ in {axial_unit.dollar_tex} ($s_{{{str(dims[0]) * 2}}}$ = {su.format(sens_x, tex=True)})"
+        rf"$\Delta x_{{{dims[0]}}}$ in {axial_unit.dollar_tex} ($s_{{{str(dims[0]) * 2}}} = {su.format(sens_x, tex=True)}$)"
     )
     ax.set_ylabel(
-        rf"$\Delta x_{{{dims[1]}}}$ in {axial_unit.dollar_tex} ($s_{{{str(dims[1]) * 2}}}$ = {su.format(sens_y, tex=True)})"
+        rf"$\Delta x_{{{dims[1]}}}$ in {axial_unit.dollar_tex} ($s_{{{str(dims[1]) * 2}}} = {su.format(sens_y, tex=True)}$)"
     )
     ax.xaxis.set_major_formatter(axial_unit.axis_formatter())
     ax.yaxis.set_major_formatter(axial_unit.axis_formatter())
 
     ax.set_title(
-        rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}}$ = {fraction_unit.format(self.analysis.min_coupling, tex=True)})"
+        rf"Sensitivity Analysis ($r_{{{dims[0]}{dims[1]}}} = {fraction_unit.format(self.analysis.min_coupling, tex=True)}$)"
     )
 
     return SensitivityPlot(
