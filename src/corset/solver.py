@@ -758,7 +758,7 @@ class ModeMatchingSolution(YamlSerializableMixin):
         new_solution = ModeMatchingSolution(candidate=self.candidate, positions=res.x)
         old_coupling = self.analysis.min_coupling
         new_coupling = new_solution.analysis.min_coupling
-        if (old_coupling - new_coupling) > min_abs_improvement or new_coupling / old_coupling < min_rel_improvement:
+        if (old_coupling - new_coupling) > min_abs_improvement or 1 - new_coupling / old_coupling > min_rel_improvement:
             return new_solution
         return None
 
