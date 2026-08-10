@@ -283,7 +283,42 @@ class ThickLens(YamlSerializableMixin):
 
     def __str__(self) -> str:
         unit = Config.Units.axial
-        return self.name if self.name is not None else f"f≈{unit.format(self.focal_length).replace(' ', '')}"
+        focal_length_str = unit.format(self.focal_length).replace(" ", "") if not np.isnan(self.focal_length) else "n/a"
+        return self.name if self.name is not None else f"f≈{focal_length_str}"
+
+    @classmethod
+    def block(
+        cls,
+        thickness: float,
+        refractive_index: float,
+        left_margin: float | None = None,
+        right_margin: float | None = None,
+        name: str | None = None,
+    ):
+        """Create a thick lens with two flat surfaces representing a block of material.
+
+        Args:
+            thickness: Thickness of the block.
+            refractive_index: Refractive index of the block material.
+            left_margin: Optional physical size to the left of the block center. Defaults to half the thickness.
+            right_margin: Optional physical size to the right of the block center. Defaults to half the thickness.
+
+        Returns:
+            ThickLens instance representing a block of material.
+        """
+        if left_margin is None:
+            left_margin = thickness / 2
+        if right_margin is None:
+            right_margin = thickness / 2
+        return cls(
+            in_roc=cls.FLAT,
+            out_roc=cls.FLAT,
+            thickness=thickness,
+            refractive_index=refractive_index,
+            left_margin=left_margin,
+            right_margin=right_margin,
+            name=name,
+        )
 
 
 Lens = ThinLens | ThickLens  #: Lens type union

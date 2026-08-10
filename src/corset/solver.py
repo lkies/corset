@@ -33,7 +33,7 @@ with warnings.catch_warnings():
 
 from .analysis import ModeMatchingAnalysis
 from .config import Config
-from .core import Beam, Lens, OpticalSetup
+from .core import Beam, Lens, OpticalSetup, ThickLens
 from .display import FormattedDataFrame, FractionUnit, LengthUnit, SensitivityUnit
 from .plot import (
     fig_to_png,
@@ -292,6 +292,16 @@ class ModeMatchingProblem(YamlSerializableMixin):
         regions.extend((c.position, c.position, c) for c in self.constraints if isinstance(c, (Aperture, Focus)))
         regions.extend((pas.left, pas.right, pas) for pas in self.constraints if isinstance(pas, Passage))
         regions.sort(key=lambda x: x[0])
+
+        # as a special case, thick "lenses" with two flat interfaces are allowed to be in passages
+        # to allow constraining the beam through a crystal
+        remove = []
+        is_flat_flat = lambda elem: isinstance(elem, ThickLens) and np.isinf(elem.in_roc) and np.isinf(elem.out_roc)
+        for i, (r1, r2) in enumerate(pairwise(regions), start=1):
+            if r1[1] >= r2[0] and r1[1] >= r2[1] and isinstance(r1[2], Passage) and is_flat_flat(r2[2]):
+                remove.append(i)
+        regions = [r for i, r in enumerate(regions) if i not in remove]
+
         for r1, r2 in pairwise(regions):
             if r1[1] > r2[0]:
                 raise ValueError(f"Overlapping regions/elements detected: {r1[2]} and {r2[2]}.")
