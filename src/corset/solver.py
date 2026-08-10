@@ -69,6 +69,34 @@ class ShiftingRange(YamlSerializableMixin):
         if self.max_elements < self.min_elements:
             raise ValueError("max_elements cannot be less than min_elements.")
 
+    def without(self, *sections: tuple[float, float]) -> list["ShiftingRange"]:
+        """Create a list of shifting ranges by excluding sections from this range.
+
+        Args:
+            *sections: Segments to exclude, each specified as a (left, right) tuple.
+
+        Returns:
+            List of ShiftingRange instances that represent the original range minus the excluded ranges.
+        """
+        sorted_sections = sorted(sections, key=lambda r: r[0])
+        new_sections = []
+        current_left = self.left
+
+        for ex_left, ex_right in sorted_sections:
+            if ex_right <= current_left or ex_left >= self.right:
+                continue  # Exclude range is outside the current range
+            if ex_left > current_left:
+                new_sections.append((current_left, min(ex_left, self.right)))
+            current_left = max(current_left, ex_right)
+
+        if current_left < self.right:
+            new_sections.append((current_left, self.right))
+
+        return [
+            ShiftingRange(left=left, right=right, min_elements=self.min_elements, max_elements=self.max_elements)
+            for left, right in new_sections
+        ]
+
 
 @dataclass(frozen=True)
 class ParametrizedSetup(YamlSerializableMixin):
