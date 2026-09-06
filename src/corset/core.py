@@ -20,13 +20,13 @@ from scipy.optimize import curve_fit
 
 from .config import Config
 from .plot import OpticalSetupPlot, fig_to_png, plot_setup
-from .serialize import YamlSerializableMixin
+from .serialize import YamlPngSerializableMixin, YamlSerializableMixin
 
 
 # TODO should beam include wavelength or should it be part of the larger setup?
 # TODO refractive index?
 @dataclass(frozen=True)
-class Beam(YamlSerializableMixin):
+class Beam(YamlPngSerializableMixin):
     """Paraxial Gaussian beam representation.
 
     Implements :meth:`_repr_png_` to show a plot of the beam radius in IPython environments
@@ -325,7 +325,7 @@ Lens = ThinLens | ThickLens  #: Lens type union
 
 
 @dataclass(frozen=True)
-class OpticalSetup(YamlSerializableMixin):
+class OpticalSetup(YamlPngSerializableMixin):
     """Optical setup described by an initial beam and a sequence of elements.
 
     Implements :meth:`_repr_png_` to show a plot of the optical setup in IPython environments

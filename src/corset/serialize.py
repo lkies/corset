@@ -73,20 +73,35 @@ class YamlSerializableMixin:
         YamlSerializableMixin._Dumper.add_representer(cls, cls.__representer)  # pyright: ignore[reportArgumentType]
         YamlSerializableMixin._Loader.add_constructor(f"!{cls.__name__}", cls.__constructor)
 
-    def save_yaml(self: Any, filename: str | Path) -> None:
-        """Save the object to a YAML file.
-
-        Args:
-            filename: Path to the YAML file.
-        """
+    def _to_yaml_string(self) -> str:
         from . import __version__
 
         yaml_data = {
             "meta": {"corset_version": __version__, "timestamp": pd.Timestamp.now().isoformat()},
             "data": self,
         }
+        return yaml.dump(yaml_data, Dumper=YamlSerializableMixin._Dumper, sort_keys=False)
+
+    def save_yaml(self: Any, filename: str | Path) -> None:
+        """Save the object to a YAML file.
+
+        Args:
+            filename: Path to the YAML file.
+        """
         filename = Path(filename)
-        filename.write_text(yaml.dump(yaml_data, Dumper=YamlSerializableMixin._Dumper, sort_keys=False))
+        filename.write_text(self._to_yaml_string())
+
+    @classmethod
+    def _from_yaml_string(cls, yaml_string: str):
+        yaml_data = yaml.load(yaml_string, Loader=YamlSerializableMixin._Loader)  # noqa: S506
+        if "data" not in yaml_data:
+            raise ValueError("YAML file does not contain 'data' field.")
+        data = yaml_data["data"]
+        if cls is not YamlSerializableMixin and not isinstance(data, cls):
+            raise TypeError(
+                f"Attempting to load object of type '{type(data).__name__}' through different type '{cls.__name__}'."
+            )
+        return data
 
     @classmethod
     def load_yaml(cls, filename: str | Path) -> Self:
@@ -104,17 +119,46 @@ class YamlSerializableMixin:
             ValueError: If the YAML file does not contain a 'data' field.
             TypeError: If the loaded object type does not match the class used to call this method.
         """
+        return cls._from_yaml_string(Path(filename).read_text())
 
-        filename = Path(filename)
-        yaml_data = yaml.load(filename.read_text(), Loader=YamlSerializableMixin._Loader)  # noqa: S506
-        if "data" not in yaml_data:
-            raise ValueError("YAML file does not contain 'data' field.")
-        data = yaml_data["data"]
-        if cls is not YamlSerializableMixin and not isinstance(data, cls):
+
+class YamlPngSerializableMixin(YamlSerializableMixin):
+    def __init_subclass__(cls) -> None:
+        if not (hasattr(cls, "_repr_png_") or hasattr(cls, "_repr_mimebundle_")):
             raise TypeError(
-                f"Attempting to load object of type '{type(data).__name__}' through different type '{cls.__name__}'."
+                f"{cls.__name__} must implement either _repr_png_ or _repr_mimebundle_ that"
+                f"includes a PNG representation with embedded YAML metadata to use {cls.__name__}."
             )
-        return data
+        super().__init_subclass__()
+
+    def save_png(self, filename: str | Path) -> None:
+        """Save the object to a PNG file with YAML metadata.
+
+        Args:
+            filename: Path to the PNG file.
+        """
+        from IPython.core.formatters import format_display_data
+
+        png_data = format_display_data(self, include=["image/png"])[0]["image/png"]
+        Path(filename).write_bytes(png_data)
+
+    @classmethod
+    def load_png(cls, filename: str | Path) -> Self:
+        """Load an object from a PNG file with YAML metadata.
+
+        Args:
+            filename: Path to the PNG file.
+
+        Returns:
+            The loaded object.
+        """
+        from PIL import Image
+
+        with Image.open(filename) as img:
+            yaml_string = img.info.get("yaml")
+            if yaml_string is None:
+                raise ValueError(f"PNG file '{filename}' does not contain YAML metadata.")
+            return cls._from_yaml_string(yaml_string)
 
 
 YamlSerializableMixin._register_misc_classes()

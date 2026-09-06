@@ -42,7 +42,7 @@ from .plot import (
     plot_reachability,
     plot_sensitivity,
 )
-from .serialize import YamlSerializableMixin
+from .serialize import YamlPngSerializableMixin, YamlSerializableMixin
 
 PERFECT_OVERLAP = 0.999
 """Threshold above which the overlap between two beams is considered
@@ -635,7 +635,7 @@ class ModeMatchingCandidate(YamlSerializableMixin):
 
 
 @dataclass(frozen=True)
-class ModeMatchingSolution(YamlSerializableMixin):
+class ModeMatchingSolution(YamlPngSerializableMixin):
     """A solution to a mode matching problem.
 
     Implements :meth:`_repr_png_` to show a plot of the solution setup in IPython environments
@@ -663,7 +663,10 @@ class ModeMatchingSolution(YamlSerializableMixin):
     def _repr_mimebundle_(self, include: None = None, exclude: None = None) -> dict[str, Any]:
         # use the single mime bundle method to avoid generating the plot twice for the png and html representations
         fig, _ = self.plot_all()
-        image_bytes = fig_to_png(fig)
+        yaml_string = self._to_yaml_string()
+        image_bytes = fig_to_png(fig, metadata={"yaml": yaml_string})
+        image_b64 = base64.b64encode(image_bytes).decode()
+        yaml_b64 = base64.b64encode(yaml_string.encode()).decode()
 
         table_html = f"{self.analysis.element_summary_df().to_html(notebook=True, columns=Config.Repr.solution_element_summary_columns)}"
         match Config.Repr.solution_element_summary:
@@ -678,8 +681,21 @@ class ModeMatchingSolution(YamlSerializableMixin):
             case invalid:
                 raise ValueError(f"Invalid value for element_summary: {invalid}")
 
-        html = f"""{element_summary_html}
-        <img src="data:image/png;base64,{base64.b64encode(image_bytes).decode()}" alt="Mode Matching Solution Plot" />
+        html = f"""
+        <style>
+            .corset-solution-figure {{ position: relative; display: inline-block; max-width: 100%; }}
+            .corset-solution-actions {{ position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.35rem; opacity: 0; pointer-events: none; z-index: 2; }}
+            .corset-solution-actions a {{ display: inline-block; padding: 0.2rem 0.55rem; border: 1px solid rgba(0,0,0,0.35); border-radius: 0.25rem; background: #fff; color: #111; text-decoration: none; }}
+            .corset-solution-figure:hover .corset-solution-actions {{ opacity: 1; pointer-events: auto; }}
+        </style>
+        {element_summary_html}
+        <div class="corset-solution-figure">
+            <div class="corset-solution-actions">
+                <a download="solution.yaml" href="data:text/yaml;base64,{yaml_b64}">Save YAML</a>
+                <a download="solution.png" href="data:image/png;base64,{image_b64}">Save PNG</a>
+            </div>
+            <img src="data:image/png;base64,{image_b64}" alt="Mode Matching Solution Plot" />
+        </div>
         """
 
         return {

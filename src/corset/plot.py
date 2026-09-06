@@ -33,17 +33,18 @@ if TYPE_CHECKING:
 RELATIVE_MARGIN = 0.1  #: Relative margin size for plotting optical setups
 
 
-def fig_to_png(fig: Figure) -> bytes:
+def fig_to_png(fig: Figure, metadata: dict[str, str] | None = None) -> bytes:
     """Convert a Matplotlib figure to a PNG as bytes.
 
     Args:
         fig: The figure to convert.
+        metadata: Optional metadata to include in the saved image.
 
     Returns:
         The PNG representation of the figure as bytes.
     """
     buf = BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight")
+    fig.savefig(buf, format="png", bbox_inches="tight", metadata=metadata)
     plt.close(fig)
     return buf.getvalue()
 
