@@ -168,3 +168,19 @@ class Config:
         """Subset of columns to show in the solution summary table. If ``None``, all columns are shown."""
         lens_list_columns: list[str] | None = None
         """Subset of columns to show in the lens list representation table. If ``None``, all columns are shown."""
+
+        @classmethod
+        def set_minimal(cls):
+            """Set the table columns to a minimal set.
+
+            Equivalent to:
+
+            .. code-block:: python
+
+                Config.Repr.solution_element_summary_columns = ["element", "shape", "position", "clearance_left", "clearance_right", "sensitivity"]
+                Config.Repr.solution_summary_columns = ["overlap", "num_elements", "elements", "max_sensitivity", "min_coupling"]
+                Config.Repr.lens_list_columns = ["name", "shape", "focal_length", "left_margin", "right_margin"]
+            """
+            cls.solution_element_summary_columns = [ "element", "shape", "position", "clearance_left", "clearance_right", "sensitivity"]  # fmt: skip
+            cls.solution_summary_columns = ["overlap", "num_elements", "elements", "max_sensitivity", "min_coupling"]
+            cls.lens_list_columns = ["name", "shape", "focal_length", "left_margin", "right_margin"]
