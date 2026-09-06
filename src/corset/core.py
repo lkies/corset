@@ -305,6 +305,12 @@ class ThickLens(YamlSerializableMixin):
 
         Returns:
             ThickLens instance representing a block of material.
+
+        .. tip::
+            While the solver will generally not allow for any overlap between elements and other
+            mode matching regions, there is a special case that allows a block to be located
+            inside a :class:`~corset.solver.Passage` region. This is useful for ensuring that the
+            beam actually fits through the block.
         """
         if left_margin is None:
             left_margin = thickness / 2
