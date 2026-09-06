@@ -650,10 +650,15 @@ class ModeMatchingSolution(YamlPngSerializableMixin):
         """Mode overlap of the solution."""
         return self.candidate.parametrized_overlap(self.positions)
 
-    @property
+    @cached_property
     def setup(self) -> OpticalSetup:
         """Optical setup corresponding to this solution."""
         return self.candidate.parametrized_setup.substitute(self.positions)  # pyright: ignore[reportArgumentType]
+
+    @cached_property
+    def hash(self) -> str:
+        """Hash of the solution based on the :py:func:`repr` to easily identify a solution."""
+        return hashlib.md5(repr(self).encode(), usedforsecurity=False).hexdigest()
 
     plot_setup = plot_mode_match_solution_setup  #: Plot the solution setup, see :func:`corset.plot.plot_mode_match_solution_setup`
     plot_reachability = plot_reachability  #: Plot the reachability analysis, see :func:`corset.plot.plot_reachability`
