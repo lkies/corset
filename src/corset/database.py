@@ -161,6 +161,17 @@ class LensList(YamlSerializableMixin):
 
         return FormattedDataFrame(df, formatters=formatters)  # pyright: ignore[reportCallIssue]
 
+    def query(self, expr: str) -> "LensList":
+        """Filter lenses based on a :meth:`pandas.DataFrame.query` expression applied to the DataFrame representation.
+
+        Args:
+            expr: Query string, see :meth:`pandas.DataFrame.query` for details.
+
+        Returns:
+            A new :class:`LensList` containing only the elements that satisfy the query.
+        """
+        return self[cast(list[int], list(self.df().query(expr).index))]
+
     def _repr_html_(self) -> str:
         return self.df().to_html(notebook=True, columns=Config.Repr.lens_list_columns)
 
