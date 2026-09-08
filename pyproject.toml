@@ -12,7 +12,7 @@ dependencies = [
 ]
 name = "beam-corset"
 requires-python = ">= 3.11"
-version = "0.6.0"
+version = "0.6.1"
 description = "Beam Corset is a Gaussian optics mode matching tool made for use in Jupyter notebooks."
 readme = "README.md"
 license = "BSD-3-Clause"
