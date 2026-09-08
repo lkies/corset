@@ -53,6 +53,7 @@ Contents
    gen/analyzing_solutions.ipynb
    gen/beam_constraints.ipynb
    gen/fixed_optics.ipynb
+   gen/serialization.ipynb
    gen/configuration.ipynb
 
 

@@ -89,7 +89,7 @@ class YamlSerializableMixin:
             filename: Path to the YAML file.
         """
         filename = Path(filename)
-        filename.write_text(self._to_yaml_string())
+        filename.write_text(YamlSerializableMixin._to_yaml_string(self))
 
     @classmethod
     def _from_yaml_string(cls, yaml_string: str):
