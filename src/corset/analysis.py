@@ -372,7 +372,7 @@ class ModeMatchingAnalysis:
         """Sensitivity vector of the element with respect to all degrees of freedom if it is a free element"""
         couplings: np.ndarray | None
         """Coupling vector of the element with respect to all degrees of freedom if it is a free element"""
-        shifting_range: ShiftingRange | None
+        shifting_range: "ShiftingRange | None"
         """The shifting range the element belongs to if it is a free element"""
 
     @cached_property

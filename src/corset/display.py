@@ -3,7 +3,11 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
-from typing import override
+
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
 
 import numpy as np
 import pandas as pd

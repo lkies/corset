@@ -124,7 +124,7 @@ def get_handles(ax: Axes) -> list[tuple[Any, str]]:
 
 
 # TODO include mode matching elements in computation?
-def _beam_limits(setup: OpticalSetup, rayleigh_range_cap: float, show_fit_data: bool) -> tuple[float, float]:
+def _beam_limits(setup: "OpticalSetup", rayleigh_range_cap: float, show_fit_data: bool) -> tuple[float, float]:
     beam_and_element_corners = (
         [setup.beams[0].focus, setup.beams[-1].focus]
         + [min(pos, pos - elem.left_margin) for pos, elem in setup.elements]
@@ -303,6 +303,19 @@ def plot_setup(  # noqa: C901
             zorder=zorder,
         )
 
+        rect = None
+        if lens.left_margin or lens.right_margin:
+            rect = Rectangle(
+                (pos - lens.left_margin, -r_max * (1 + RELATIVE_MARGIN)),
+                lens.left_margin + lens.right_margin,
+                2 * r_max * (1 + RELATIVE_MARGIN),
+                fc="none",
+                ec=color,
+                ls="--",
+                zorder=zorder,
+            )
+            ax.add_patch(rect)
+
         label_text = str(lens)
         if i in free_lenses:
             label_text = f"$L_{i}$: {label_text} @ ${axial_unit.format(pos, tex=True)}$"
@@ -317,19 +330,6 @@ def plot_setup(  # noqa: C901
             bbox={"fc": plt.rcParams["axes.facecolor"], "ec": "none", "alpha": 0.7},
             zorder=zorder,
         )
-
-        rect = None
-        if lens.left_margin or lens.right_margin:
-            rect = Rectangle(
-                (pos - lens.left_margin, -r_max * (1 + RELATIVE_MARGIN)),
-                lens.left_margin + lens.right_margin,
-                2 * r_max * (1 + RELATIVE_MARGIN),
-                fc="none",
-                ec=color,
-                ls="--",
-                zorder=zorder,
-            )
-            ax.add_patch(rect)
 
         lenses.append((line, label, rect))
 
