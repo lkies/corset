@@ -5,6 +5,12 @@
 # Python cache files
 __pycache__/
 
+# Test coverage files
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # Docs build files
 docs/build/
 docs/source/gen/
