@@ -63,6 +63,10 @@ pip = "*"
 jupyterlite-xeus = ">=4.4.0,<5"
 jupyter_server = ">=2.17.0,<3"
 
+[tool.pixi.feature.dev.dependencies]
+pytest = ">=9.2.0,<10"
+pytest-cov = ">=7.0.0,<8"
+
 
 [tool.pixi.environments]
 dev = ["dev"]
@@ -88,9 +92,11 @@ build-pages = { depends-on = ["build-docs", "build-jp-lite"] }
 # Ensure pytest looks for tests in the tests/ directory and uses the normal test_*.py pattern
 testpaths = ["tests"]
 python_files = "test_*.py"
+addopts = ["--cov=corset", "--cov-report=term-missing"]
 
 [tool.ruff]
 target-version = "py312"
+lint.per-file-ignores = { "tests/**/*.py" = ["S101"] }
 lint.select = [
     # flake8-2020
     "YTT",
