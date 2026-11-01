@@ -85,9 +85,12 @@ class Config:
     class PlotSolution:
         """Configuration of default values for mode matching solution plots."""
 
-        setup_kwargs: typing.ClassVar[dict] = {}
+        setup_kwargs: typing.ClassVar[dict] = {"show_fit_data": False}
         """Keyword arguments to pass to the setup plot."""
-        desired_kwargs: typing.ClassVar[dict] = {"color": "C1", "label": "Desired Beam"}
+        desired_kwargs: typing.ClassVar[dict] = {
+            "beam_kwargs": {"color": "C1", "label": "Desired Beam"},
+            "show_fit_data": False,
+        }
         """Keyword arguments for the desired beam plot."""
         show_legend: bool = False
         """Whether to show a legend describing the plot aspects."""
@@ -132,7 +135,7 @@ class Config:
         """Width ratios for the three subplots in the overview plot."""
         tight_layout: bool = True
         """Whether to use tight layout for the overview plot."""
-        setup_kwargs: typing.ClassVar[dict] = {"setup_kwargs": {"show_fit_data": False}}
+        setup_kwargs: typing.ClassVar[dict] = {}
         """Keyword arguments to pass to the setup plot."""
         reachability_kwargs: typing.ClassVar[dict] = {}
         """Keyword arguments to pass to the reachability plot."""

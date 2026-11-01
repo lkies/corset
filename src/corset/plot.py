@@ -432,8 +432,8 @@ def plot_mode_match_solution_setup(  # noqa: C901
     desired_plot = plot_setup(
         OpticalSetup(problem.desired_beam, []),
         ax=ax,
-        beam_kwargs=desired_kwargs,
         show_legend=show_legend,
+        **desired_kwargs,
     )
 
     handles = get_handles(ax)
@@ -544,6 +544,13 @@ def plot_ellipse(
     return patch
 
 
+def combine_covariances(*covariances: np.ndarray | None) -> np.ndarray | None:
+    valid_covariances = [cov for cov in covariances if cov is not None]
+    if not valid_covariances:
+        return None
+    return sum(valid_covariances)  # pyright: ignore[reportReturnType]
+
+
 def plot_reachability(
     self: "ModeMatchingSolution",
     *,
@@ -637,13 +644,9 @@ def plot_reachability(
     contrast_color = plt.rcParams["text.color"]
     center = ax.scatter(0, self.candidate.problem.desired_beam.waist, color=contrast_color, marker="o", zorder=100)
     center_ci = None
-    if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
-        center_ci = plot_ellipse(
-            ax,
-            (0, self.candidate.problem.desired_beam.waist),
-            self.setup.beams[-1].gauss_cov,
-            confidence_interval,
-        )
+    gauss_cov = combine_covariances(self.setup.beams[-1].gauss_cov, self.candidate.problem.desired_beam.gauss_cov)
+    if confidence_interval is not False and gauss_cov is not None:
+        center_ci = plot_ellipse(ax, (0, self.candidate.problem.desired_beam.waist), gauss_cov, confidence_interval)
 
     def select_lines(arr: np.ndarray, dim: int, steps: list[int]) -> np.ndarray:
         steps = [step if i != dim else 1 for i, step in enumerate(steps)]
@@ -839,9 +842,10 @@ def plot_sensitivity(
         ax.legend(handles=handles, loc="lower left").set_zorder(1000)
 
     displacements_ci = None
-    if confidence_interval is not False and self.setup.beams[-1].gauss_cov is not None:
+    gauss_cov = combine_covariances(self.setup.beams[-1].gauss_cov, self.candidate.problem.desired_beam.gauss_cov)
+    if confidence_interval is not False and gauss_cov is not None:
         jac_inv = np.linalg.inv(self.analysis.focus_and_waist_jacobian[:, dimensions[:2]])
-        cov_xy = jac_inv @ self.setup.beams[-1].gauss_cov @ jac_inv.T
+        cov_xy = jac_inv @ gauss_cov @ jac_inv.T
         limits = ax.axis()
         displacements_ci = plot_ellipse(ax, (0, 0), cov_xy, confidence_interval)
         ax.axis(limits)
